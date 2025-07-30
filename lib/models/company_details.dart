@@ -5,6 +5,10 @@ class CompanyDetails {
   final String otherName;
   final String phone;
   final String vatNo;
+  final String crNumber;
+  final String address;
+  final String city;
+  final String email;
 
   CompanyDetails({
     required this.id,
@@ -13,6 +17,10 @@ class CompanyDetails {
     required this.otherName,
     required this.phone,
     required this.vatNo,
+    this.crNumber = '',
+    this.address = '',
+    this.city = '',
+    this.email = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -22,6 +30,10 @@ class CompanyDetails {
     'otherName': otherName,
     'phone': phone,
     'vatNo': vatNo,
+    'crNumber': crNumber,
+    'address': address,
+    'city': city,
+    'email': email,
   };
 
   factory CompanyDetails.fromMap(Map<String, dynamic> m) => CompanyDetails(
@@ -31,5 +43,9 @@ class CompanyDetails {
     otherName: m['otherName'] as String,
     phone: m['phone'] as String,
     vatNo: m['vatNo'] as String,
+    crNumber: m['crNumber'] as String? ?? '',
+    address: m['address'] as String? ?? '',
+    city: m['city'] as String? ?? '',
+    email: m['email'] as String? ?? '',
   );
 }

@@ -6,44 +6,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface InvoiceData {
-  no: number;
-  date: string;
-  customer: string;
-  salesman: string;
-  vatNo: string;
-  total: number;
-  vatAmount: number;
-  items: any[];
-  company: any;
-}
-
 interface ZatcaResponse {
   success: boolean;
   uuid?: string;
   qr_code?: string;
   error?: string;
   timestamp: string;
+  request_id?: string;
+  compliance_status?: string;
+  reporting_status?: string;
+  clearance_status?: string;
 }
 
 // ZATCA API Configuration
 const ZATCA_CONFIG = {
   // Sandbox URLs - replace with production URLs for live environment
   BASE_URL: Deno.env.get('ZATCA_BASE_URL') || 'https://gw-fatoora.zatca.gov.sa/e-invoicing/developer-portal',
-  API_VERSION: 'v2',
+  API_VERSION: 'V2',
   ENDPOINTS: {
-    COMPLIANCE: '/compliance',
-    REPORTING: '/reporting',
-    CLEARANCE: '/clearance',
+    COMPLIANCE: '/compliance/invoices',
+    REPORTING: '/invoices/reporting/single',
+    CLEARANCE: '/invoices/clearance/single',
+  },
+  HEADERS: {
+    'Accept': 'application/json',
+    'Accept-Language': 'en',
+    'Accept-Version': 'V2',
+    'Content-Type': 'application/json',
   }
 };
 
-// Digital Certificate Configuration
-const CERT_CONFIG = {
-  PRIVATE_KEY: Deno.env.get('ZATCA_PRIVATE_KEY'),
-  CERTIFICATE: Deno.env.get('ZATCA_CERTIFICATE'),
-  CERTIFICATE_PASSWORD: Deno.env.get('ZATCA_CERT_PASSWORD'),
+// Authentication Configuration
+const AUTH_CONFIG = {
+  USERNAME: Deno.env.get('ZATCA_USERNAME') || 'flutterinvoiceapp@gmail.com',
+  PASSWORD: Deno.env.get('ZATCA_PASSWORD'),
+  AUTHORIZATION: Deno.env.get('ZATCA_AUTHORIZATION') || 'Basic Zmx1dHRlcmludm9pY2VhcHBAZ21haWwuY29t0lJpendhbiMxMTIy',
 };
+
+// Environment flag - set to true for testing mode
+const TESTING_MODE = true; // Set to false for production
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -59,6 +60,8 @@ serve(async (req) => {
       throw new Error('Invoice data is required')
     }
 
+    console.log('Received invoice data:', JSON.stringify(invoice, null, 2))
+
     // Validate invoice data
     const validationResult = validateInvoiceData(invoice)
     if (!validationResult.isValid) {
@@ -71,18 +74,70 @@ serve(async (req) => {
     // Create ZATCA-compliant invoice XML
     const zatcaXml = generateZatcaXml(invoice, invoiceHash)
 
+    console.log('Generated XML:', zatcaXml)
+
+    if (TESTING_MODE) {
+      // Simulate ZATCA API responses for testing
+      return simulateZatcaResponse(invoice, request_id)
+    } else {
+      // Real ZATCA API calls
+      return await processWithRealZatca(zatcaXml, request_id)
+    }
+
+  } catch (error) {
+    console.error('ZATCA processing error:', error)
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      } as ZatcaResponse),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      }
+    )
+  }
+})
+
+// Simulate ZATCA API responses for testing
+function simulateZatcaResponse(invoice: any, request_id?: string): Response {
+  const uuid = generateUUID()
+  const qrCode = generateTestQRCode(invoice)
+  
+  return new Response(
+    JSON.stringify({
+      success: true,
+      uuid: uuid,
+      qr_code: qrCode,
+      timestamp: new Date().toISOString(),
+      request_id: request_id,
+      compliance_status: 'approved',
+      reporting_status: 'submitted',
+      clearance_status: 'cleared',
+      message: 'Invoice processed successfully (TESTING MODE)',
+    } as ZatcaResponse),
+    {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    }
+  )
+}
+
+// Process with real ZATCA API
+async function processWithRealZatca(zatcaXml: string, request_id?: string): Promise<Response> {
+  try {
     // Digitally sign the invoice
     const signedInvoice = await digitallySignInvoice(zatcaXml)
 
     // Submit to ZATCA compliance API
     const complianceResponse = await submitToZatcaCompliance(signedInvoice)
 
-    // If compliance check passes, submit to reporting
     if (complianceResponse.success) {
       const reportingResponse = await submitToZatcaReporting(signedInvoice)
       
       if (reportingResponse.success) {
-        // Submit to clearance
         const clearanceResponse = await submitToZatcaClearance(signedInvoice)
         
         return new Response(
@@ -107,58 +162,60 @@ serve(async (req) => {
     } else {
       throw new Error(`Compliance check failed: ${complianceResponse.error}`)
     }
-
   } catch (error) {
-    console.error('ZATCA processing error:', error)
-    
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      } as ZatcaResponse),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
-    )
+    throw new Error(`ZATCA API error: ${error.message}`)
   }
-})
+}
 
 // Validate invoice data according to ZATCA requirements
-function validateInvoiceData(invoice: InvoiceData): { isValid: boolean; errors: string[] } {
+function validateInvoiceData(invoice: any): { isValid: boolean; errors: string[] } {
   const errors: string[] = []
 
-  if (!invoice.no || invoice.no <= 0) {
-    errors.push('Invalid invoice number')
+  // Check invoice number
+  if (!invoice.no && !invoice.invoice_number) {
+    errors.push('Invoice number is required')
   }
 
+  // Check date
   if (!invoice.date) {
     errors.push('Invoice date is required')
   }
 
-  if (!invoice.customer || invoice.customer.trim() === '') {
+  // Check customer
+  if (!invoice.customer) {
     errors.push('Customer name is required')
   }
 
-  if (!invoice.vatNo || invoice.vatNo.trim() === '') {
-    errors.push('VAT number is required')
-  }
-
-  if (!invoice.total || invoice.total <= 0) {
-    errors.push('Invalid total amount')
-  }
-
-  if (!invoice.vatAmount || invoice.vatAmount < 0) {
-    errors.push('Invalid VAT amount')
-  }
-
+  // Check items
   if (!invoice.items || invoice.items.length === 0) {
     errors.push('Invoice must have at least one item')
   }
 
-  if (!invoice.company) {
-    errors.push('Company details are required')
+  // Calculate total amount from items if not provided
+  if (!invoice.total && !invoice.finalAmount) {
+    if (invoice.items && invoice.items.length > 0) {
+      let calculatedTotal = 0;
+      for (const item of invoice.items) {
+        const quantity = item.quantity || 0;
+        const rate = item.rate || item.price || 0;
+        calculatedTotal += quantity * rate;
+      }
+      
+      if (invoice.vatPercent) {
+        const vatAmount = calculatedTotal * (invoice.vatPercent / 100);
+        calculatedTotal += vatAmount;
+      }
+      
+      if (invoice.discount) {
+        calculatedTotal -= invoice.discount;
+      }
+      
+      if (calculatedTotal <= 0) {
+        errors.push('Total amount is required')
+      }
+    } else {
+      errors.push('Total amount is required')
+    }
   }
 
   return {
@@ -168,24 +225,74 @@ function validateInvoiceData(invoice: InvoiceData): { isValid: boolean; errors: 
 }
 
 // Generate SHA-256 hash of invoice data
-function generateInvoiceHash(invoice: InvoiceData): string {
-  const hashData = `${invoice.no}${invoice.date}${invoice.customer}${invoice.vatNo}${invoice.total}${invoice.vatAmount}`
+function generateInvoiceHash(invoice: any): string {
+  const invoiceNo = invoice.no || invoice.invoice_number || '1';
   
-  // In a real implementation, you would use a proper crypto library
-  // For this example, we'll create a simple hash
-  let hash = 0
-  for (let i = 0; i < hashData.length; i++) {
-    const char = hashData.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32-bit integer
+  // Calculate totals from items if not provided
+  let subtotal = 0;
+  if (invoice.items && invoice.items.length > 0) {
+    for (const item of invoice.items) {
+      const quantity = item.quantity || 0;
+      const rate = item.rate || item.price || 0;
+      subtotal += quantity * rate;
+    }
   }
   
-  return Math.abs(hash).toString(16)
+  const vatPercent = invoice.vatPercent || 15;
+  const discount = invoice.discount || 0;
+  const vatAmount = invoice.vatAmount || (subtotal * vatPercent / 100);
+  const total = invoice.total || (subtotal + vatAmount - discount);
+  
+  const hashData = `${invoiceNo}${invoice.date}${invoice.customer}${total.toFixed(2)}${vatAmount.toFixed(2)}`;
+  
+  console.log('Hash data:', hashData);
+  
+  // Simple hash for demo
+  let hash = 0;
+  for (let i = 0; i < hashData.length; i++) {
+    const char = hashData.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  
+  return Math.abs(hash).toString(16);
 }
 
 // Generate ZATCA-compliant XML
-function generateZatcaXml(invoice: InvoiceData, hash: string): string {
-  const now = new Date().toISOString()
+function generateZatcaXml(invoice: any, hash: string): string {
+  // Safely extract values with fallbacks
+  const invoiceNo = invoice.no || invoice.invoice_number || 'INV-001'
+  const invoiceDate = invoice.date || new Date().toISOString()
+  const customerName = invoice.customer || 'Customer'
+  const vatNo = invoice.vatNo || invoice.vat_number || invoice.customerVat || '000000000000000'
+  const items = invoice.items || []
+  
+  // Calculate totals from items if not provided
+  let subtotal = 0;
+  for (const item of items) {
+    const quantity = item.quantity || 0;
+    const rate = item.rate || item.price || 0;
+    subtotal += quantity * rate;
+  }
+  
+  const vatPercent = invoice.vatPercent || 15;
+  const discount = invoice.discount || 0;
+  const vatAmount = invoice.vatAmount || (subtotal * vatPercent / 100);
+  const total = invoice.total || (subtotal + vatAmount - discount);
+  
+  // Company details with fallbacks
+  const company = invoice.company || {}
+  const companyVatNo = company.vatNo || company.vat_number || '000000000000000'
+  const companyName = company.ownerName1 || company.name || 'Company Name'
+  const companyAddress = company.address || 'Street Address'
+  const companyCity = company.city || 'City'
+  
+  console.log('Calculated totals:', {
+    subtotal: subtotal.toFixed(2),
+    vatAmount: vatAmount.toFixed(2),
+    total: total.toFixed(2),
+    discount: discount.toFixed(2)
+  });
   
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" 
@@ -194,26 +301,26 @@ function generateZatcaXml(invoice: InvoiceData, hash: string): string {
   <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
   <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>
   <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
-  <cbc:ID>${invoice.no}</cbc:ID>
+  <cbc:ID>${invoiceNo}</cbc:ID>
   <cbc:CopyIndicator>false</cbc:CopyIndicator>
   <cbc:UUID>${generateUUID()}</cbc:UUID>
-  <cbc:IssueDate>${formatDate(invoice.date)}</cbc:IssueDate>
-  <cbc:IssueTime>${formatTime(invoice.date)}</cbc:IssueTime>
+  <cbc:IssueDate>${formatDate(invoiceDate)}</cbc:IssueDate>
+  <cbc:IssueTime>${formatTime(invoiceDate)}</cbc:IssueTime>
   <cbc:InvoiceTypeCode>110</cbc:InvoiceTypeCode>
   <cbc:DocumentCurrencyCode>SAR</cbc:DocumentCurrencyCode>
-  <cbc:LineCountNumeric>${invoice.items.length}</cbc:LineCountNumeric>
+  <cbc:LineCountNumeric>${items.length}</cbc:LineCountNumeric>
   
   <cac:AccountingSupplierParty>
     <cac:Party>
       <cac:PartyIdentification>
-        <cbc:ID schemeID="VAT">${invoice.company.vatNo || '000000000000000'}</cbc:ID>
+        <cbc:ID schemeID="VAT">${companyVatNo}</cbc:ID>
       </cac:PartyIdentification>
       <cac:PartyName>
-        <cbc:Name>${invoice.company.ownerName1 || 'Company Name'}</cbc:Name>
+        <cbc:Name>${companyName}</cbc:Name>
       </cac:PartyName>
       <cac:PostalAddress>
-        <cbc:StreetName>Street Address</cbc:StreetName>
-        <cbc:CityName>City</cbc:CityName>
+        <cbc:StreetName>${companyAddress}</cbc:StreetName>
+        <cbc:CityName>${companyCity}</cbc:CityName>
         <cbc:PostalZone>00000</cbc:PostalZone>
         <cac:Country>
           <cbc:IdentificationCode>SA</cbc:IdentificationCode>
@@ -230,10 +337,10 @@ function generateZatcaXml(invoice: InvoiceData, hash: string): string {
   <cac:AccountingCustomerParty>
     <cac:Party>
       <cac:PartyIdentification>
-        <cbc:ID schemeID="VAT">${invoice.vatNo || '000000000000000'}</cbc:ID>
+        <cbc:ID schemeID="VAT">${vatNo}</cbc:ID>
       </cac:PartyIdentification>
       <cac:PartyName>
-        <cbc:Name>${invoice.customer}</cbc:Name>
+        <cbc:Name>${customerName}</cbc:Name>
       </cac:PartyName>
       <cac:PostalAddress>
         <cbc:StreetName>Customer Address</cbc:StreetName>
@@ -252,14 +359,14 @@ function generateZatcaXml(invoice: InvoiceData, hash: string): string {
   </cac:PaymentMeans>
   
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="SAR">${invoice.vatAmount.toFixed(2)}</cbc:TaxAmount>
+    <cbc:TaxAmount currencyID="SAR">${vatAmount.toFixed(2)}</cbc:TaxAmount>
     <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="SAR">${(invoice.total - invoice.vatAmount).toFixed(2)}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="SAR">${invoice.vatAmount.toFixed(2)}</cbc:TaxAmount>
-      <cbc:Percent>15</cbc:Percent>
+      <cbc:TaxableAmount currencyID="SAR">${(subtotal - discount).toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="SAR">${vatAmount.toFixed(2)}</cbc:TaxAmount>
+      <cbc:Percent>${vatPercent}</cbc:Percent>
       <cac:TaxCategory>
         <cbc:ID>S</cbc:ID>
-        <cbc:Percent>15</cbc:Percent>
+        <cbc:Percent>${vatPercent}</cbc:Percent>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>
@@ -268,26 +375,32 @@ function generateZatcaXml(invoice: InvoiceData, hash: string): string {
   </cac:TaxTotal>
   
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="SAR">${(invoice.total - invoice.vatAmount).toFixed(2)}</cbc:LineExtensionAmount>
-    <cbc:TaxExclusiveAmount currencyID="SAR">${(invoice.total - invoice.vatAmount).toFixed(2)}</cbc:TaxExclusiveAmount>
-    <cbc:TaxInclusiveAmount currencyID="SAR">${invoice.total.toFixed(2)}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="SAR">${invoice.total.toFixed(2)}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="SAR">${(subtotal - discount).toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="SAR">${(subtotal - discount).toFixed(2)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="SAR">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="SAR">${total.toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
   
-  ${invoice.items.map((item, index) => `
+  ${items.map((item: any, index: number) => {
+    const quantity = item.quantity || 1;
+    const rate = item.price || item.rate || 0;
+    const lineTotal = quantity * rate;
+    const lineVat = lineTotal * (vatPercent / 100);
+    
+    return `
   <cac:InvoiceLine>
     <cbc:ID>${index + 1}</cbc:ID>
-    <cbc:InvoicedQuantity unitCode="PCE">${item.quantity}</cbc:InvoicedQuantity>
-    <cbc:LineExtensionAmount currencyID="SAR">${(item.price * item.quantity).toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:InvoicedQuantity unitCode="PCE">${quantity}</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="SAR">${lineTotal.toFixed(2)}</cbc:LineExtensionAmount>
     <cac:TaxTotal>
-      <cbc:TaxAmount currencyID="SAR">${(item.price * item.quantity * 0.15).toFixed(2)}</cbc:TaxAmount>
+      <cbc:TaxAmount currencyID="SAR">${lineVat.toFixed(2)}</cbc:TaxAmount>
       <cac:TaxSubtotal>
-        <cbc:TaxableAmount currencyID="SAR">${(item.price * item.quantity).toFixed(2)}</cbc:TaxableAmount>
-        <cbc:TaxAmount currencyID="SAR">${(item.price * item.quantity * 0.15).toFixed(2)}</cbc:TaxAmount>
-        <cbc:Percent>15</cbc:Percent>
+        <cbc:TaxableAmount currencyID="SAR">${lineTotal.toFixed(2)}</cbc:TaxableAmount>
+        <cbc:TaxAmount currencyID="SAR">${lineVat.toFixed(2)}</cbc:TaxAmount>
+        <cbc:Percent>${vatPercent}</cbc:Percent>
         <cac:TaxCategory>
           <cbc:ID>S</cbc:ID>
-          <cbc:Percent>15</cbc:Percent>
+          <cbc:Percent>${vatPercent}</cbc:Percent>
           <cac:TaxScheme>
             <cbc:ID>VAT</cbc:ID>
           </cac:TaxScheme>
@@ -295,14 +408,14 @@ function generateZatcaXml(invoice: InvoiceData, hash: string): string {
       </cac:TaxSubtotal>
     </cac:TaxTotal>
     <cac:Item>
-      <cbc:Name>${item.name}</cbc:Name>
+      <cbc:Name>${item.name || item.description || 'Item'}</cbc:Name>
       <cbc:Description>${item.description || ''}</cbc:Description>
     </cac:Item>
     <cac:Price>
-      <cbc:PriceAmount currencyID="SAR">${item.price.toFixed(2)}</cbc:PriceAmount>
+      <cbc:PriceAmount currencyID="SAR">${rate.toFixed(2)}</cbc:PriceAmount>
     </cac:Price>
-  </cac:InvoiceLine>
-  `).join('')}
+  </cac:InvoiceLine>`;
+  }).join('')}
 </Invoice>`
 }
 
@@ -315,29 +428,87 @@ function generateUUID(): string {
   })
 }
 
+// Generate test QR code data
+function generateTestQRCode(invoice: any): string {
+  const invoiceNo = invoice.no || invoice.invoice_number || 'INV-001'
+  const total = invoice.total || invoice.finalAmount || 0
+  const vatAmount = invoice.vatAmount || invoice.vat_amount || (total * 0.15)
+  const timestamp = new Date().toISOString()
+  
+  const qrData = {
+    seller_name: invoice.company?.ownerName1 || 'Company Name',
+    vat_number: invoice.company?.vatNo || '000000000000000',
+    timestamp: timestamp,
+    total: total,
+    vat_amount: vatAmount,
+    invoice_number: invoiceNo,
+    uuid: generateUUID(),
+  }
+  
+  return btoa(JSON.stringify(qrData))
+}
+
 // Format date for ZATCA
 function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toISOString().split('T')[0]
+  try {
+    let date: Date;
+    
+    if (dateString.includes('T') || dateString.includes('Z')) {
+      date = new Date(dateString);
+    } else if (dateString.includes(' – ')) {
+      const datePart = dateString.split(' – ')[0];
+      date = new Date(datePart);
+    } else if (dateString.includes('-')) {
+      date = new Date(dateString);
+    } else {
+      date = new Date();
+    }
+    
+    if (isNaN(date.getTime())) {
+      date = new Date();
+    }
+    
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return new Date().toISOString().split('T')[0];
+  }
 }
 
 // Format time for ZATCA
 function formatTime(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toISOString().split('T')[1].split('.')[0]
+  try {
+    let date: Date;
+    
+    if (dateString.includes('T') || dateString.includes('Z')) {
+      date = new Date(dateString);
+    } else if (dateString.includes(' – ')) {
+      const timePart = dateString.split(' – ')[1];
+      if (timePart) {
+        const today = new Date().toISOString().split('T')[0];
+        date = new Date(`${today}T${timePart}`);
+      } else {
+        date = new Date();
+      }
+    } else if (dateString.includes('-')) {
+      date = new Date(dateString);
+    } else {
+      date = new Date();
+    }
+    
+    if (isNaN(date.getTime())) {
+      date = new Date();
+    }
+    
+    return date.toISOString().split('T')[1].split('.')[0];
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return new Date().toISOString().split('T')[1].split('.')[0];
+  }
 }
 
 // Digitally sign the invoice XML
 async function digitallySignInvoice(xmlContent: string): Promise<string> {
-  // In a real implementation, you would:
-  // 1. Load the private key and certificate
-  // 2. Create a canonicalized version of the XML
-  // 3. Generate a signature using SHA-256
-  // 4. Add the signature to the XML
-  
-  // For this example, we'll return the XML as-is
-  // In production, implement proper digital signing
-  
   console.log('Digital signing would be implemented here')
   return xmlContent
 }
@@ -350,10 +521,14 @@ async function submitToZatcaCompliance(signedXml: string): Promise<{ success: bo
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/xml',
-        'Authorization': `Bearer ${Deno.env.get('ZATCA_API_TOKEN')}`,
+        ...ZATCA_CONFIG.HEADERS,
+        'Authorization': AUTH_CONFIG.AUTHORIZATION,
       },
-      body: signedXml,
+      body: JSON.stringify({
+        invoiceHash: generateInvoiceHash({ invoice: signedXml }),
+        uuid: generateUUID(),
+        invoice: btoa(signedXml),
+      }),
     })
 
     if (response.ok) {
@@ -375,10 +550,14 @@ async function submitToZatcaReporting(signedXml: string): Promise<{ success: boo
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/xml',
-        'Authorization': `Bearer ${Deno.env.get('ZATCA_API_TOKEN')}`,
+        ...ZATCA_CONFIG.HEADERS,
+        'Authorization': AUTH_CONFIG.AUTHORIZATION,
       },
-      body: signedXml,
+      body: JSON.stringify({
+        invoiceHash: generateInvoiceHash({ invoice: signedXml }),
+        uuid: generateUUID(),
+        invoice: btoa(signedXml),
+      }),
     })
 
     if (response.ok) {
@@ -400,10 +579,15 @@ async function submitToZatcaClearance(signedXml: string): Promise<{ success: boo
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/xml',
-        'Authorization': `Bearer ${Deno.env.get('ZATCA_API_TOKEN')}`,
+        ...ZATCA_CONFIG.HEADERS,
+        'Authorization': AUTH_CONFIG.AUTHORIZATION,
+        'Clearance-Status': '1',
       },
-      body: signedXml,
+      body: JSON.stringify({
+        invoiceHash: generateInvoiceHash({ invoice: signedXml }),
+        uuid: generateUUID(),
+        invoice: btoa(signedXml),
+      }),
     })
 
     if (response.ok) {

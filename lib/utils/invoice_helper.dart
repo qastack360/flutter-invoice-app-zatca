@@ -6,20 +6,27 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/company_details.dart';
 import '../models/item_data.dart';
+import 'dart:convert';
 
 class InvoiceHelper {
   static Future<Uint8List> generatePdf({
-    required int invoiceNo,
+    required String invoiceNumber,
+    required Map<String, dynamic> invoiceData,
+    required Map<String, dynamic> qrData,
+    required String customerName,
     required String date,
-    required String salesman,
-    required String customer,
-    required String vatNo,
-    required List<ItemData> items,
-    required double vatPercent,
+    required List<Map<String, dynamic>> items,
+    required double total,
+    required double vatAmount,
+    required double subtotal,
     required double discount,
-    required double cash,
-    required CompanyDetails? companyDetails,
-    required String qrData,
+    required String vatPercent,
+    required Map<String, dynamic> companyDetails,
+    String? verificationMessage,
+    String? salesman,
+    String? cash,
+    String? customer,
+    String? vatNo,
   }) async {
     final pdf = pw.Document();
     final fmt = NumberFormat.currency(symbol: '', decimalDigits: 2);
@@ -78,10 +85,10 @@ class InvoiceHelper {
           bold: latinBold,
         ),
         build: (ctx) {
-          final subtotal = items.fold<double>(0, (s, i) => s + i.quantity * i.rate);
-          final subtotalVat = items.fold<double>(0, (s, i) => s + (i.quantity * i.rate * vatPercent / 100));
-          final total = subtotal + subtotalVat - discount;
-          final change = cash - total;
+          // Calculate totals from items
+          final subtotal = items.fold<double>(0, (s, i) => s + (i['quantity'] ?? 0) * (i['rate'] ?? 0));
+          final subtotalVat = items.fold<double>(0, (s, i) => s + ((i['quantity'] ?? 0) * (i['rate'] ?? 0) * double.parse(vatPercent) / 100));
+          final change = (double.tryParse(cash ?? '0') ?? 0) - total;
 
           return pw.Container(
             color: PdfColors.grey200,
@@ -93,12 +100,12 @@ class InvoiceHelper {
                   pw.Center(
                     child: pw.Column(
                       children: [
-                        if (companyDetails.ownerName1.isNotEmpty)
-                          buildText(companyDetails.ownerName1, size: 15.4, bold: true, align: pw.TextAlign.center),
-                        if (companyDetails.ownerName2.isNotEmpty)
-                          buildText(companyDetails.ownerName2, size: 14, bold: true, align: pw.TextAlign.center),
-                        if (companyDetails.otherName.isNotEmpty)
-                          buildText(companyDetails.otherName, size: 12.6, align: pw.TextAlign.center),
+                        if ((companyDetails['ownerName1'] ?? '').isNotEmpty)
+                          buildText(companyDetails['ownerName1'] ?? '', size: 15.4, bold: true, align: pw.TextAlign.center),
+                        if ((companyDetails['ownerName2'] ?? '').isNotEmpty)
+                          buildText(companyDetails['ownerName2'] ?? '', size: 14, bold: true, align: pw.TextAlign.center),
+                        if ((companyDetails['otherName'] ?? '').isNotEmpty)
+                          buildText(companyDetails['otherName'] ?? '', size: 12.6, align: pw.TextAlign.center),
                         pw.SizedBox(height: 3),
                       ],
                     ),
@@ -106,21 +113,27 @@ class InvoiceHelper {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                     children: [
-                      if (companyDetails.phone.isNotEmpty)
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            buildText('Phone / هاتف', align: pw.TextAlign.left),
-                            buildText(companyDetails.phone, align: pw.TextAlign.right),
-                          ],
+                      if ((companyDetails['phone'] ?? '').isNotEmpty)
+                        pw.Container(
+                          width: double.infinity,
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              buildText('Phone / الهاتف', size: 10),
+                              buildText(companyDetails['phone'] ?? '', align: pw.TextAlign.right),
+                            ],
+                          ),
                         ),
-                      if (companyDetails.vatNo.isNotEmpty)
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            buildText('VAT / الضريبة', align: pw.TextAlign.left),
-                            buildText(companyDetails.vatNo, align: pw.TextAlign.right),
-                          ],
+                      if ((companyDetails['vatNo'] ?? '').isNotEmpty)
+                        pw.Container(
+                          width: double.infinity,
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              buildText('VAT No / الرقم الضريبي', size: 10),
+                              buildText(companyDetails['vatNo'] ?? '', align: pw.TextAlign.right),
+                            ],
+                          ),
                         ),
                     ],
                   ),
@@ -136,20 +149,20 @@ class InvoiceHelper {
 
                 // Invoice details
                 ..._infoRows([
-                  ['Invoice No / رقم الفاتورة', '$invoiceNo'],
+                  ['Invoice No / رقم الفاتورة', invoiceNumber],
                   ['Date / التاريخ', date],
-                  ['Sales Man / الموظف', salesman],
-                  ['Customer / اسم العميل', customer],
-                  if (vatNo.isNotEmpty) ['VAT No / رقم ضريبي', vatNo],
+                  ['Sales Man / الموظف', salesman ?? ''],
+                  ['Customer / اسم العميل', customer ?? ''],
+                  if ((vatNo ?? '').isNotEmpty) ['VAT No / رقم ضريبي', vatNo ?? ''],
                 ], buildText),
                 pw.SizedBox(height: 5),
 
                 // Items table with optimized rendering
-                _itemsTable(items, fmt, vatPercent, buildText),
+                _itemsTable(items, double.parse(vatPercent), buildText),
                 pw.SizedBox(height: 5),
 
                 // Totals
-                _totalsTable(subtotal, discount, subtotalVat, total, cash, change, vatPercent, buildText),
+                _totalsTable(subtotal, discount, subtotalVat, total, double.tryParse(cash ?? '0') ?? 0, change, vatPercent, buildText),
                 pw.SizedBox(height: 5),
 
                 // Footer
@@ -169,7 +182,7 @@ class InvoiceHelper {
                     color: PdfColors.grey200,
                     child: pw.BarcodeWidget(
                       barcode: pw.Barcode.qrCode(),
-                      data: qrData,
+                      data: jsonEncode(qrData),
                       width: 170, // Optimized QR size
                       height: 170,
                     ),
@@ -215,8 +228,7 @@ class InvoiceHelper {
   }
 
   static pw.Widget _itemsTable(
-      List<ItemData> items,
-      NumberFormat fmt,
+      List<Map<String, dynamic>> items,
       double vatPercent,
       pw.Widget Function(String, {double size, bool bold, pw.TextAlign align}) buildText,
       ) {
@@ -241,64 +253,48 @@ class InvoiceHelper {
             color: PdfColors.grey300,
           ),
           children: [
-            _cell('No', 'رقم', buildText),
-            _cell('Description', 'وصف', buildText),
-            _cell('Qty', 'الكمية', buildText),
-            _cell('Rate', 'السعر', buildText),
-            _cell('VAT', 'الضريبة', buildText),
-            _cell('Total', 'المجموع', buildText),
+            buildText('Sr', size: 10, bold: true, align: pw.TextAlign.center),
+            buildText('Description', size: 10, bold: true, align: pw.TextAlign.center),
+            buildText('Qty', size: 10, bold: true, align: pw.TextAlign.center),
+            buildText('Rate', size: 10, bold: true, align: pw.TextAlign.center),
+            buildText('VAT', size: 10, bold: true, align: pw.TextAlign.center),
+            buildText('Total', size: 10, bold: true, align: pw.TextAlign.center),
           ],
         ),
-        for (var i = 0; i < items.length; i++)
-          pw.TableRow(
-            verticalAlignment: pw.TableCellVerticalAlignment.middle,
+        ...items.asMap().entries.map((entry) {
+          final index = entry.key;
+          final item = entry.value;
+          return pw.TableRow(
             children: [
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                child: buildText('${i+1}', size: 11.2, align: pw.TextAlign.center),
-              ),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                child: buildText(items[i].description, size: 12, align: pw.TextAlign.center),
-              ),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                child: buildText(items[i].quantity.toStringAsFixed(0), size: 11.2, align: pw.TextAlign.center),
-              ),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                child: buildText(fmt.format(items[i].rate), size: 11.2, align: pw.TextAlign.center),
-              ),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                child: buildText(fmt.format(items[i].quantity * items[i].rate * vatPercent / 100), size: 11.2, align: pw.TextAlign.center),
-              ),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                child: buildText(fmt.format(items[i].quantity * items[i].rate), size: 11.2, align: pw.TextAlign.center),
-              ),
+              buildText('${index + 1}', size: 10, align: pw.TextAlign.center),
+              buildText(item['description'] ?? '', size: 10),
+              buildText('${item['quantity'] ?? 0}', size: 10, align: pw.TextAlign.center),
+              buildText('${item['rate'] ?? 0}', size: 10, align: pw.TextAlign.center),
+              buildText('${((item['quantity'] ?? 0) * (item['rate'] ?? 0) * vatPercent / 100).toStringAsFixed(2)}', size: 10, align: pw.TextAlign.center),
+              buildText('${((item['quantity'] ?? 0) * (item['rate'] ?? 0) * (1 + vatPercent / 100)).toStringAsFixed(2)}', size: 10, align: pw.TextAlign.center),
             ],
-          ),
+          );
+        }).toList(),
       ],
     );
   }
 
   static pw.Widget _totalsTable(
-      double sub,
-      double disc,
-      double vatAmt,
+      double subtotal,
+      double discount,
+      double subtotalVat,
       double total,
       double cash,
       double change,
-      double vatPct,
+      String vatPercent,
       pw.Widget Function(String, {double size, bool bold, pw.TextAlign align}) buildText,
       ) {
     return pw.Table(
       columnWidths: const {0: pw.FlexColumnWidth(3), 1: pw.FlexColumnWidth(2)},
       children: [
-        _totalRow('Subtotal / الإجمالي الفرعي', '', sub.toStringAsFixed(2), buildText),
-        _totalRow('Discount / الخصم ', '', disc.toStringAsFixed(2), buildText),
-        _totalRow('VAT ${vatPct.toStringAsFixed(0)}%', 'ضريبة القيمة المضافة', vatAmt.toStringAsFixed(2), buildText),
+        _totalRow('Subtotal / الإجمالي الفرعي', '', subtotal.toStringAsFixed(2), buildText),
+        _totalRow('Discount / الخصم ', '', discount.toStringAsFixed(2), buildText),
+        _totalRow('VAT (${double.parse(vatPercent).toStringAsFixed(1)}%): SAR ${subtotalVat.toStringAsFixed(2)}', '', '', buildText),
         pw.TableRow(children: [
           pw.Container(
             padding: const pw.EdgeInsets.symmetric(vertical: 2),

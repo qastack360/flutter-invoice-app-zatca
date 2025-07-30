@@ -26,6 +26,7 @@ dependencies:
   screenshot: ^3.0.0
   render_metrics: ^2.0.2
   pdfx: ^2.9.2
+  archive: ^3.4.9
   # Supabase dependencies
   supabase_flutter: ^2.3.4
   http: ^1.1.0

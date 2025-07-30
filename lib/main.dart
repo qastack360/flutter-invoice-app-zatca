@@ -1,16 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/create_invoice.dart';
-import 'screens/history.dart';
+import 'screens/categorized_history_screen.dart';
 import 'screens/settings.dart';
-import 'screens/zatca_history_screen.dart';
-import 'screens/local_history_screen.dart';
-import 'screens/company_details_screen.dart';
-import 'screens/invoice_settings_screen.dart';
-import 'screens/zatca_settings_screen.dart';
-import 'screens/sync_settings_screen.dart';
-import 'screens/app_settings_screen.dart';
 import 'services/supabase_service.dart';
 
 // ✅ Add this line at the top
@@ -253,59 +245,12 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _screens.addAll([
       CreateInvoiceScreen(refreshNotifier: _refreshCreateNotifier),
-      HistoryScreen(refreshNotifier: _refreshHistoryNotifier),
+      CategorizedHistoryScreen(refreshNotifier: _refreshHistoryNotifier),
       SettingsScreen(refreshNotifier: _refreshCreateNotifier),
     ]);
   }
 
   final List<Color> _topColors = [Colors.green, Colors.yellow, Colors.blue];
-
-  void _showHistoryOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Select History Type',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            ListTile(
-              leading: Icon(Icons.qr_code, color: Colors.orange),
-              title: Text('ZATCA History'),
-              subtitle: Text('Invoices sent to ZATCA system'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ZatcaHistoryScreen(refreshNotifier: _refreshHistoryNotifier),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.storage, color: Colors.blue),
-              title: Text('Local History'),
-              subtitle: Text('Offline invoices'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LocalHistoryScreen(refreshNotifier: _refreshHistoryNotifier),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -326,14 +271,6 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _selectedIndex,
         children: _screens,
       ),
-      floatingActionButton: _selectedIndex == 1 ? FloatingActionButton.extended(
-        onPressed: () {
-          _showHistoryOptions();
-        },
-        icon: Icon(Icons.history),
-        label: Text('History Options'),
-        backgroundColor: Colors.orange,
-      ) : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {

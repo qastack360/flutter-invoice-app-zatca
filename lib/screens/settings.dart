@@ -116,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        children: [
             Text(
               'User Information / معلومات المستخدم',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -128,7 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: Text('Name / الاسم'),
                 subtitle: Text(_userName),
               ),
-            ListTile(
+          ListTile(
               leading: Icon(Icons.email),
               title: Text('Email / البريد الإلكتروني'),
               subtitle: Text(_userEmail),
@@ -168,9 +168,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.business,
               title: 'Company Details / تفاصيل الشركة',
               subtitle: 'Manage company information',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
                   builder: (_) => CompanyDetailsScreen(refreshNotifier: widget.refreshNotifier),
                 ),
               ),
@@ -183,20 +183,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => InvoiceSettingsScreen(refreshNotifier: widget.refreshNotifier),
-                ),
               ),
             ),
+          ),
             _buildCategoryTile(
               icon: Icons.qr_code,
               title: 'ZATCA Settings / إعدادات ضريبة القيمة المضافة',
               subtitle: 'ZATCA e-invoicing configuration',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
                   builder: (_) => ZatcaSettingsScreen(refreshNotifier: widget.refreshNotifier),
                 ),
               ),
-            ),
+                ),
             _buildCategoryTile(
               icon: Icons.sync,
               title: 'Sync Settings / إعدادات المزامنة',
@@ -205,15 +205,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => SyncSettingsScreen(refreshNotifier: widget.refreshNotifier),
-                ),
               ),
             ),
+          ),
             _buildCategoryTile(
               icon: Icons.settings,
               title: 'App Settings / إعدادات التطبيق',
               subtitle: 'General application preferences',
-              onTap: () => Navigator.push(
-                context,
+            onTap: () => Navigator.push(
+              context,
                 MaterialPageRoute(
                   builder: (_) => AppSettingsScreen(refreshNotifier: widget.refreshNotifier),
                 ),
@@ -253,12 +253,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text(
               'Printing Options / خيارات الطباعة',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+          ),
             SizedBox(height: 16),
-            SwitchListTile(
+          SwitchListTile(
               title: Text('Mock Printing / الطباعة الوهمية'),
               subtitle: Text('Use mock printing for testing'),
-              value: _mockPrinting,
+            value: _mockPrinting,
               onChanged: _setMockPrinting,
             ),
           ],
@@ -309,7 +309,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Text('Supports Saudi Arabia e-invoicing system'),
                     ],
                   );
-                },
+            },
                 icon: Icon(Icons.info),
                 label: Text('More Info / المزيد من المعلومات'),
                 style: ElevatedButton.styleFrom(
@@ -317,8 +317,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: Colors.white,
                 ),
               ),
-            ),
-          ],
+          ),
+        ],
         ),
       ),
     );

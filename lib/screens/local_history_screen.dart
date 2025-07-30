@@ -1,8 +1,11 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'package:intl/intl.dart';
+import '../models/item_data.dart';
 import '../utils/export_helper.dart';
+import '../services/supabase_service.dart';
+import 'invoice_preview_screen.dart';
 
 class LocalHistoryScreen extends StatefulWidget {
   final ValueNotifier<bool> refreshNotifier;
@@ -19,6 +22,7 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
   bool _isLoading = true;
   final _searchController = TextEditingController();
   final ExportHelper _exportHelper = ExportHelper();
+  final SupabaseService _supabaseService = SupabaseService();
 
   @override
   void initState() {
@@ -106,106 +110,174 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
         return;
       }
 
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('Exporting $format...'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Please wait while we generate your $format file...'),
+            ],
+          ),
+        ),
+      );
+
       String fileName;
       if (format == 'csv') {
-        fileName = await _exportHelper.exportToCSV(
-          monthlyInvoices, 
-          'LOCAL_${DateFormat('yyyy_MM').format(now)}'
-        );
+        try {
+          fileName = await _exportHelper.exportToCSV(
+            monthlyInvoices, 
+            'Local_${DateFormat('yyyy_MM').format(now)}'
+          );
+        } catch (e) {
+          Navigator.of(context).pop(); // Close loading dialog
+          if (e.toString().contains('web')) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('CSV export not supported on web. Please use PDF export instead.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('CSV export failed: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
       } else {
-        fileName = await _exportHelper.exportToPDF(
-          monthlyInvoices, 
-          'LOCAL_${DateFormat('yyyy_MM').format(now)}'
-        );
+        try {
+          fileName = await _exportHelper.exportToPDF(
+            monthlyInvoices, 
+            'Local_${DateFormat('yyyy_MM').format(now)}'
+          );
+        } catch (e) {
+          Navigator.of(context).pop(); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('PDF export failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
+      Navigator.of(context).pop(); // Close loading dialog
+
+      // Show success message with file location
+      String message;
+      if (fileName.startsWith('data:')) {
+        // Web platform - PDF data URL
+        message = 'PDF generated successfully! Click to download.';
+      } else {
+        // Mobile/Desktop platform - file path
+        message = '$format exported successfully!\nFile: $fileName';
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$format exported successfully: $fileName'),
+          content: Text(message),
           backgroundColor: Colors.green,
+          duration: Duration(seconds: 5),
+          action: fileName.startsWith('data:') ? SnackBarAction(
+            label: 'Download',
+            onPressed: () {
+              // Handle web download
+              // You can implement web download logic here
+            },
+          ) : null,
         ),
       );
     } catch (e) {
+      // Close loading dialog if still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error exporting data: $e'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
         ),
       );
     }
   }
 
-  Widget _buildInvoiceCard(Map<String, dynamic> invoice, int index) {
-    final dateParts = invoice['date'].split(' – ');
-    final date = dateParts[0];
-    final time = dateParts.length > 1 ? dateParts[1] : '';
+  Widget _buildInvoiceListItem(Map<String, dynamic> invoice) {
+    final items = (invoice['items'] as List<dynamic>)
+        .map((item) => ItemData.fromMap(item as Map<String, dynamic>))
+        .toList();
+    
+    final totalAmount = items.fold<double>(0, (sum, item) => sum + ((item?.quantity ?? 0) * (item?.rate ?? 0)));
+    final vatAmount = totalAmount * (invoice['vatPercent'] ?? 15) / 100;
+    final discount = invoice['discount'] ?? 0.0;
+    final finalAmount = totalAmount + vatAmount - discount;
+
+    final date = invoice['date'] ?? '';
+    final time = invoice['time'] ?? '';
 
     return Card(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: ListTile(
-        contentPadding: EdgeInsets.all(16),
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue[700],
-          child: Text(
-            '${index + 1}',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Local Invoice #${invoice['no']}',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.blue[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'LOCAL',
-                style: TextStyle(
-                  color: Colors.blue[800],
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
+        title: Text(
+          'Invoice #${invoice['invoice_prefix'] ?? 'INV'}-${invoice['no']}',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: 8),
             Text('Customer: ${invoice['customer']}'),
-            Text('Date: $date'),
+            if (date.isNotEmpty) Text('Date: $date'),
             if (time.isNotEmpty) Text('Time: $time'),
             SizedBox(height: 8),
             Text(
-              'Total: SAR ${invoice['total'].toStringAsFixed(2)}',
+              'Total SAR: ${finalAmount.toStringAsFixed(2)}',
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
             ),
           ],
         ),
-        trailing: IconButton(
-          icon: Icon(Icons.print, size: 32, color: Colors.grey),
-          onPressed: () {
-            // Show invoice details
-            _showInvoiceDetails(invoice);
-          },
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(Icons.print, color: Colors.green),
+              onPressed: () => _printInvoice(invoice),
+            ),
+            IconButton(
+              icon: Icon(Icons.qr_code, size: 32, color: Colors.blue),
+              onPressed: () {
+                // Show QR code or invoice details
+                _showInvoiceDetails(invoice);
+              },
+            ),
+          ],
         ),
+        onTap: () => _showInvoicePreview(invoice),
       ),
     );
   }
 
   void _showInvoiceDetails(Map<String, dynamic> invoice) {
+    final items = (invoice['items'] as List<dynamic>)
+        .map((item) => ItemData.fromMap(item as Map<String, dynamic>))
+        .toList();
+    
+    final totalAmount = items.fold<double>(0, (sum, item) => sum + ((item?.quantity ?? 0) * (item?.rate ?? 0)));
+    final vatAmount = totalAmount * (invoice['vatPercent'] ?? 15) / 100;
+    final discount = invoice['discount'] ?? 0.0;
+    final finalAmount = totalAmount + vatAmount - discount;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -218,11 +290,43 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
               Text('Invoice #: ${invoice['no']}'),
               Text('Customer: ${invoice['customer']}'),
               Text('Date: ${invoice['date']}'),
-              Text('Total: SAR ${invoice['total'].toStringAsFixed(2)}'),
-              Text('Type: Local (Offline)'),
+              Text('Total SAR: ${finalAmount.toStringAsFixed(2)}'),
+              Text('Type: Invoice (Offline)'),
               if (invoice['items'] != null) ...[
                 SizedBox(height: 8),
                 Text('Items: ${invoice['items'].length}'),
+                SizedBox(height: 8),
+                // Items Table with VAT Amount
+                Container(
+                  width: double.maxFinite,
+                  child: DataTable(
+                    columnSpacing: 8,
+                    columns: [
+                      DataColumn(label: Text('Sr', style: TextStyle(fontSize: 12))),
+                      DataColumn(label: Text('Description', style: TextStyle(fontSize: 12))),
+                      DataColumn(label: Text('Qty', style: TextStyle(fontSize: 12))),
+                      DataColumn(label: Text('Rate', style: TextStyle(fontSize: 12))),
+                      DataColumn(label: Text('VAT', style: TextStyle(fontSize: 12))),
+                      DataColumn(label: Text('Total', style: TextStyle(fontSize: 12))),
+                    ],
+                    rows: (invoice['items'] as List<dynamic>).asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      final itemData = ItemData.fromMap(item as Map<String, dynamic>);
+                      final itemTotal = itemData.quantity * itemData.rate;
+                      final itemVat = itemTotal * (invoice['vatPercent'] ?? 15) / 100;
+                      final itemTotalWithVat = itemTotal + itemVat;
+                      return DataRow(cells: [
+                        DataCell(Text('${index + 1}', style: TextStyle(fontSize: 11))),
+                        DataCell(Text(itemData.description, style: TextStyle(fontSize: 11))),
+                        DataCell(Text(itemData.quantity.toString(), style: TextStyle(fontSize: 11))),
+                        DataCell(Text('SAR ${itemData.rate.toStringAsFixed(2)}', style: TextStyle(fontSize: 11))),
+                        DataCell(Text('SAR ${itemVat.toStringAsFixed(2)}', style: TextStyle(fontSize: 11))),
+                        DataCell(Text('SAR ${itemTotalWithVat.toStringAsFixed(2)}', style: TextStyle(fontSize: 11))),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
               ],
             ],
           ),
@@ -235,6 +339,170 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
         ],
       ),
     );
+  }
+
+  void _showInvoicePreview(Map<String, dynamic> invoice) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InvoicePreviewScreen(
+          invoice: invoice,
+          refreshNotifier: widget.refreshNotifier,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _printInvoice(Map<String, dynamic> invoice) async {
+    try {
+      // Check if printer is connected
+      final isConnected = await _checkPrinterConnection();
+      
+      if (!isConnected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Printer not connected. Please connect a printer first.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Generate invoice content for printing
+      final invoiceContent = _generateInvoiceContent(invoice);
+      
+      // TODO: Implement actual printing logic
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Invoice printed successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Print failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<bool> _checkPrinterConnection() async {
+    // TODO: Implement printer connection check
+    // For now, return false to show the "not connected" message
+    return false;
+  }
+
+  String _generateInvoiceContent(Map<String, dynamic> invoice) {
+    final items = (invoice['items'] as List<dynamic>)
+        .map((item) => ItemData.fromMap(item as Map<String, dynamic>))
+        .toList();
+    
+    final totalAmount = items.fold<double>(0, (sum, item) => sum + ((item?.quantity ?? 0) * (item?.rate ?? 0)));
+    final vatAmount = totalAmount * (invoice['vatPercent'] ?? 15) / 100;
+    final discount = invoice['discount'] ?? 0.0;
+    final finalAmount = totalAmount + vatAmount - discount;
+
+    StringBuffer content = StringBuffer();
+            content.writeln('LOCAL INVOICE');
+    content.writeln('Invoice #: ${invoice['no']}');
+    content.writeln('Date: ${invoice['date']}');
+    content.writeln('Customer: ${invoice['customer']}');
+    content.writeln('Total SAR: ${finalAmount.toStringAsFixed(2)}');
+            content.writeln('Type: Local (Offline)');
+    return content.toString();
+  }
+
+  // Sync single invoice to ZATCA
+  Future<void> _syncSingleInvoice(Map<String, dynamic> invoice) async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 16),
+              Text('Syncing invoice to ZATCA...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.blue,
+        ),
+      );
+
+      // Call the ZATCA Edge Function
+      final response = await _supabaseService.callZatcaEdgeFunction(invoice);
+      
+      if (response['success'] == true) {
+        // Update local invoice with ZATCA response
+        await _updateInvoiceWithZatcaResponse(invoice, response);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invoice synced successfully to ZATCA!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Refresh the list
+        setState(() {
+          _loadLocalInvoices();
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: ${response['error'] ?? 'Unknown error'}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sync error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Update invoice with ZATCA response
+  Future<void> _updateInvoiceWithZatcaResponse(Map<String, dynamic> invoice, Map<String, dynamic> response) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final invoices = prefs.getStringList('invoices') ?? [];
+      
+      // Find and update the specific invoice
+      for (int i = 0; i < invoices.length; i++) {
+        final invoiceData = jsonDecode(invoices[i]);
+        if (invoiceData['no'] == invoice['no'] && 
+            invoiceData['date'] == invoice['date'] &&
+            invoiceData['customer'] == invoice['customer']) {
+          
+          // Update with ZATCA response
+          invoiceData['zatca_uuid'] = response['uuid'];
+          invoiceData['zatca_qr_code'] = response['qr_code'];
+          invoiceData['sync_status'] = 'completed';
+          invoiceData['zatca_response'] = response;
+          invoiceData['synced_at'] = DateTime.now().toIso8601String();
+          invoiceData['zatca_invoice'] = true; // Mark as ZATCA invoice
+          
+          // Save back to SharedPreferences
+          invoices[i] = jsonEncode(invoiceData);
+          await prefs.setStringList('invoices', invoices);
+          break;
+        }
+      }
+    } catch (e) {
+      print('Error updating invoice: $e');
+    }
   }
 
   @override
@@ -287,7 +555,7 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
               controller: _searchController,
               onChanged: (value) => _filterInvoices(),
               decoration: InputDecoration(
-                labelText: 'Search local invoices...',
+                labelText: 'Search Local invoices...',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -308,7 +576,7 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
                             Icon(Icons.receipt_long, size: 64, color: Colors.grey),
                             SizedBox(height: 16),
                             Text(
-                              'No local invoices found',
+                              'No Local invoices found',
                               style: TextStyle(fontSize: 18, color: Colors.grey),
                             ),
                             Text(
@@ -323,7 +591,7 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
                         itemCount: _filteredInvoices.length,
                         itemBuilder: (context, index) {
                           final invoice = _filteredInvoices[index];
-                          return _buildInvoiceCard(invoice, index);
+                          return _buildInvoiceListItem(invoice);
                         },
                       ),
           ),

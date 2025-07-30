@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/supabase_service.dart';
 
 class ZatcaSettingsScreen extends StatefulWidget {
@@ -42,9 +43,14 @@ class _ZatcaSettingsScreenState extends State<ZatcaSettingsScreen> {
 
   Future<void> _loadZatcaSettings() async {
     try {
+      // First load from local storage as fallback
+      final prefs = await SharedPreferences.getInstance();
+      final localEnvironment = prefs.getString('zatcaEnvironment') ?? 'sandbox';
+      
       final userId = _supabaseService.currentUser?.id;
       if (userId == null) {
         setState(() {
+          _selectedEnvironment = localEnvironment;
           _isLoading = false;
         });
         return;
@@ -54,7 +60,7 @@ class _ZatcaSettingsScreenState extends State<ZatcaSettingsScreen> {
           .from('zatca_settings')
           .select()
           .eq('user_id', userId)
-          .single();
+          .maybeSingle();
 
       if (response != null) {
         setState(() {
@@ -64,15 +70,17 @@ class _ZatcaSettingsScreenState extends State<ZatcaSettingsScreen> {
           _cityController.text = response['city'] ?? '';
           _phoneController.text = response['phone'] ?? '';
           _emailController.text = response['email'] ?? '';
-          _selectedEnvironment = response['environment'] ?? 'sandbox';
+          _selectedEnvironment = response['environment'] ?? localEnvironment;
           _isLoading = false;
         });
       } else {
         setState(() {
+          _selectedEnvironment = localEnvironment;
           _isLoading = false;
         });
       }
     } catch (e) {
+      print('Error loading ZATCA settings: $e');
       setState(() {
         _isLoading = false;
       });
@@ -103,7 +111,12 @@ class _ZatcaSettingsScreenState extends State<ZatcaSettingsScreen> {
 
       await _supabaseService.client
           .from('zatca_settings')
-          .upsert(settings, onConflict: 'user_id');
+          .upsert(settings, onConflict: 'user_id')
+          .select();
+
+      // Also save environment to local storage for invoice creation
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('zatcaEnvironment', _selectedEnvironment);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

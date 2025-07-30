@@ -1,10 +1,7 @@
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
-import '../models/invoice.dart';
-import '../models/invoice_item.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -243,5 +240,100 @@ class SupabaseService {
     return response.containsKey('success') && 
            response.containsKey('uuid') && 
            response.containsKey('qr_code');
+  }
+
+  // Printer status management
+  Future<void> updatePrinterStatus({
+    required String? printerMac,
+    required String? printerName,
+    required bool isConnected,
+  }) async {
+    try {
+      final userId = currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+
+      await _supabase.rpc('update_printer_connection', params: {
+        'user_uuid': userId,
+        'printer_mac': printerMac,
+        'printer_name': printerName,
+        'is_connected': isConnected,
+      });
+    } catch (e) {
+      throw Exception('Error updating printer status: $e');
+    }
+  }
+
+  // Get printer connection status
+  Future<Map<String, dynamic>> getPrinterStatus() async {
+    try {
+      final userId = currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+
+      final response = await _supabase.rpc('get_printer_status', params: {
+        'user_uuid': userId,
+      });
+
+      if (response != null && response.isNotEmpty) {
+        return response[0] as Map<String, dynamic>;
+      }
+      
+      return {
+        'is_connected': false,
+        'printer_name': null,
+        'printer_mac': null,
+        'last_connected': null,
+        'connection_attempts': 0,
+      };
+    } catch (e) {
+      throw Exception('Error getting printer status: $e');
+    }
+  }
+
+  // Log print activity
+  Future<void> logPrintActivity({
+    required String invoiceId,
+    required int invoiceNumber,
+    required String printStatus,
+    String? printerMac,
+    String? errorMessage,
+  }) async {
+    try {
+      final userId = currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+
+      await _supabase.rpc('log_print_activity', params: {
+        'user_uuid': userId,
+        'invoice_id': invoiceId,
+        'invoice_number': invoiceNumber,
+        'print_status': printStatus,
+        'printer_mac': printerMac,
+        'error_message': errorMessage,
+      });
+    } catch (e) {
+      throw Exception('Error logging print activity: $e');
+    }
+  }
+
+  // Save invoice preview
+  Future<void> saveInvoicePreview({
+    required String invoiceId,
+    required int invoiceNumber,
+    required String invoicePrefix,
+    required Map<String, dynamic> previewData,
+  }) async {
+    try {
+      final userId = currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+
+      await _supabase.from('invoice_previews').upsert({
+        'user_id': userId,
+        'invoice_id': invoiceId,
+        'invoice_number': invoiceNumber,
+        'invoice_prefix': invoicePrefix,
+        'preview_data': previewData,
+      });
+    } catch (e) {
+      throw Exception('Error saving invoice preview: $e');
+    }
   }
 } 

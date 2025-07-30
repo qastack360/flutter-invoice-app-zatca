@@ -1,17 +1,15 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui; // Added for ImageByteFormat
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:image/image.dart' as img;// Added
-import 'package:my_invoice_app/services/qr_service.dart';
-import 'package:my_invoice_app/widgets/invoice_widget.dart';
+import 'package:image/image.dart' as img;
 import 'package:my_invoice_app/models/item_data.dart';
 import 'package:my_invoice_app/models/company_details.dart';
-import 'package:my_invoice_app/utils/invoice_helper.dart'; // Added
+import 'package:my_invoice_app/utils/invoice_helper.dart';
 import 'package:my_invoice_app/services/image_processing_service.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-
+import 'dart:convert'; // Added for jsonEncode
+import 'package:my_invoice_app/services/qr_service.dart'; // Added for QRService
 
 
 class BluetoothPrinterService {
@@ -109,61 +107,63 @@ class BluetoothPrinterService {
     }
   }
 
-  // FIXED: Print invoice method
+  // FIXED: Print invoice method with ZATCA support
   Future<void> printInvoice({
-    required int invoiceNo, // Changed to int
+    required String invoiceNumber,
+    required Map<String, dynamic> invoiceData,
+    required Map<String, dynamic> qrData,
+    required String customerName,
     required String date,
-    required String salesman,
-    required String customer,
-    required String vatNo,
-    required List<ItemData> items,
-    required double vatPercent,
+    required List<Map<String, dynamic>> items,
+    required double total,
+    required double vatAmount,
+    required double subtotal,
     required double discount,
-    required double cash,
-    required CompanyDetails? companyDetails,
-    required String qrData,
+    required String vatPercent,
+    required Map<String, dynamic> companyDetails,
   }) async {
-    await _initMockPrinting();
-    if (_mockPrint) {
-      print("MOCK PRINTING: Invoice");
-      return;
+    try {
+      // Generate ZATCA mobile optimized QR data
+      final zatcaQRData = QRService.generateZatcaMobileQRData(invoiceData);
+      final verificationMessage = QRService.generateVerificationMessage(zatcaQRData);
+      
+      // Generate PDF with ZATCA mobile QR
+      final pdfBytes = await InvoiceHelper.generatePdf(
+        invoiceNumber: invoiceNumber,
+        invoiceData: invoiceData,
+        qrData: zatcaQRData,
+        customerName: customerName,
+        date: date,
+        items: items,
+        total: total,
+        vatAmount: vatAmount,
+        subtotal: subtotal,
+        discount: discount,
+        vatPercent: vatPercent,
+        companyDetails: companyDetails,
+        verificationMessage: verificationMessage,
+      );
+
+      // Convert PDF to image
+      final doc = await pdfx.PdfDocument.openData(pdfBytes);
+      final page = await doc.getPage(1);
+      final pageImage = await page.render(
+        width: (page.width * 3).toDouble(),
+        height: (page.height * 3).toDouble(),
+      );
+      final imageBytes = pageImage?.bytes;
+
+      await page.close();
+      await doc.close();
+
+      if (imageBytes == null) {
+        throw Exception("Failed to render PDF to image");
+      }
+
+      await printRasterImage(imageBytes);
+    } catch (e) {
+      print("Error printing invoice: $e");
+      rethrow;
     }
-
-    if (_connectedPrinter == null || _printCharacteristic == null) {
-      throw Exception("Printer not connected");
-    }
-
-    // Generate PDF
-    final pdfBytes = await InvoiceHelper.generatePdf(
-      invoiceNo: invoiceNo,
-      date: date,
-      salesman: salesman,
-      customer: customer,
-      vatNo: vatNo,
-      items: items,
-      vatPercent: vatPercent,
-      discount: discount,
-      cash: cash,
-      companyDetails: companyDetails,
-      qrData: qrData,
-    );
-
-    // Convert PDF to image - FIXED
-    final doc = await pdfx.PdfDocument.openData(pdfBytes);
-    final page = await doc.getPage(1);
-    final pageImage = await page.render(
-      width: (page.width * 3).toDouble(),
-      height: (page.height * 3).toDouble(),
-    );
-    final imageBytes = pageImage?.bytes;
-
-    await page.close();
-    await doc.close();
-
-    if (imageBytes == null) {
-      throw Exception("Failed to render PDF to image");
-    }
-
-    await printRasterImage(imageBytes);
   }
 }

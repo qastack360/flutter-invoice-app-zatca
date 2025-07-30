@@ -18,6 +18,10 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
   final _otherNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _vatNoController = TextEditingController();
+  final _crNumberController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _emailController = TextEditingController();
   
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   bool _isLoading = true;
@@ -35,6 +39,10 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
     _otherNameController.dispose();
     _phoneController.dispose();
     _vatNoController.dispose();
+    _crNumberController.dispose();
+    _addressController.dispose();
+    _cityController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -47,6 +55,10 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
         _otherNameController.text = company.otherName;
         _phoneController.text = company.phone;
         _vatNoController.text = company.vatNo;
+        _crNumberController.text = company.crNumber;
+        _addressController.text = company.address;
+        _cityController.text = company.city;
+        _emailController.text = company.email;
         _isLoading = false;
       });
     } catch (e) {
@@ -70,6 +82,10 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
         otherName: _otherNameController.text,
         phone: _phoneController.text,
         vatNo: _vatNoController.text,
+        crNumber: _crNumberController.text,
+        address: _addressController.text,
+        city: _cityController.text,
+        email: _emailController.text,
       );
 
       await _dbHelper.updateCompany(company);
@@ -184,6 +200,44 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
                                 }
                                 return null;
                               },
+                            ),
+                            SizedBox(height: 16),
+                            TextFormField(
+                              controller: _crNumberController,
+                              decoration: InputDecoration(
+                                labelText: 'CR Number / رقم السجل التجاري',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.business),
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            TextFormField(
+                              controller: _addressController,
+                              decoration: InputDecoration(
+                                labelText: 'Address / العنوان',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.location_on),
+                              ),
+                              maxLines: 2,
+                            ),
+                            SizedBox(height: 16),
+                            TextFormField(
+                              controller: _cityController,
+                              decoration: InputDecoration(
+                                labelText: 'City / المدينة',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.location_city),
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            TextFormField(
+                              controller: _emailController,
+                              decoration: InputDecoration(
+                                labelText: 'Email / البريد الإلكتروني',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.email),
+                              ),
+                              keyboardType: TextInputType.emailAddress,
                             ),
                             SizedBox(height: 24),
                             SizedBox(

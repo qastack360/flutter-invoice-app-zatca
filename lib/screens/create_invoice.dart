@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -12,16 +12,13 @@ import '../models/item_data.dart';
 import '../utils/invoice_helper.dart';
 import '../widgets/add_item_popup.dart';
 import '../widgets/invoice_totals.dart';
-import '../widgets/item_row.dart'; // Fixed import
+import '../widgets/item_row.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../services/printer_service.dart';
 import '../services/qr_service.dart';
 import 'package:my_invoice_app/screens/preview_invoice_screen.dart';
-import 'package:printing/printing.dart'; // for convertPdfToImage
-import 'package:pdf/pdf.dart';
-import 'package:flutter/foundation.dart';
-import 'dart:ui' as ui;
 import 'package:pdfx/pdfx.dart' as pdfx;
+import '../services/supabase_service.dart'; // Added for ZATCA sync
 
 class CreateInvoiceScreen extends StatefulWidget {
   final ValueNotifier<bool> refreshNotifier;
@@ -55,6 +52,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
   CompanyDetails? _companyDetails;
   final BluetoothPrinterService _printerService = BluetoothPrinterService();
   final PrinterService _printerSelectionService = PrinterService();
+  final SupabaseService _supabaseService = SupabaseService(); // Added for ZATCA sync
   bool _isScanning = false;
   List<BluetoothDevice> _discoveredDevices = [];
   StreamSubscription<List<ScanResult>>? _scanSubscription;
@@ -62,6 +60,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
   bool _permissionsGranted = false;
   bool _isConnecting = false;
   bool _sendToZatca = false; // New toggle for ZATCA integration
+  String _currentZatcaEnvironment = 'live'; // Current ZATCA environment
 
   String get _date => DateFormat('yyyy-MM-dd – HH:mm').format(DateTime.now());
 
@@ -112,6 +111,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       _zatcaInvoiceNo = prefs.getInt('zatcaStartInvoice') ?? 1;
       _localInvoiceNo = prefs.getInt('localStartInvoice') ?? 1;
       _vatPercent = prefs.getDouble('vatPercent') ?? 15;
+      _currentZatcaEnvironment = prefs.getString('zatcaEnvironment') ?? 'live';
     });
   }
 
@@ -136,7 +136,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
   Future<void> _saveToHistory() async {
     // Determine invoice number based on ZATCA toggle
     final invoiceNumber = _sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo;
-    final invoicePrefix = _sendToZatca ? 'ZATCA' : 'LOCAL';
+    final invoicePrefix = _sendToZatca ? 'ZATCA' : 'INV_NO';
+    
+    // Calculate totals
+    final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
+    final discount = double.tryParse(_discountCtrl.text) ?? 0;
+    final vatAmount = _items.fold<double>(0, (sum, it) => sum + (it.quantity * it.rate * _vatPercent / 100));
+    final total = subtotal + vatAmount - discount;
     
     final record = {
       'no': invoiceNumber,
@@ -144,15 +150,28 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       'date': _date,
       'salesman': _salesmanCtrl.text,
       'customer': _customerCtrl.text,
-      'customerVat': _customerVatCtrl.text,
+      'vatNo': _customerVatCtrl.text, // Changed from customerVat to vatNo
       'items': _items.map((it) => it.toMap()).toList(),
       'vatPercent': _vatPercent,
-      'discount': double.tryParse(_discountCtrl.text) ?? 0,
+      'discount': discount,
       'cash': double.tryParse(_cashCtrl.text) ?? 0,
+      'total': total, // Added total field
+      'vatAmount': vatAmount, // Added vatAmount field
+      'subtotal': subtotal, // Added subtotal field
       'zatca_invoice': _sendToZatca,
-      'zatca_environment': _sendToZatca ? 'live' : null, // Will be updated from settings
+      'zatca_environment': _sendToZatca ? _currentZatcaEnvironment : null,
       'sync_status': _sendToZatca ? 'pending' : 'local',
       'created_at': DateTime.now().toIso8601String(),
+      // Add company details for ZATCA
+      'company': {
+        'ownerName1': _companyDetails?.ownerName1 ?? 'Company Name',
+        'vatNo': _companyDetails?.vatNo ?? '',
+        'crNumber': _companyDetails?.crNumber ?? '',
+        'address': _companyDetails?.address ?? '',
+        'city': _companyDetails?.city ?? '',
+        'phone': _companyDetails?.phone ?? '',
+        'email': _companyDetails?.email ?? '',
+      },
     };
     
     _history.add(record);
@@ -530,37 +549,55 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
   // FIXED: PDF to image conversion
   Future<Uint8List?> _generateInvoiceImage() async {
     try {
-      // Generate QR data
-      final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
-      final discountValue = double.tryParse(_discountCtrl.text) ?? 0;
-      final vatAmount = subtotal * _vatPercent / 100;
-      final total = subtotal + vatAmount - discountValue;
-      final cashValue = double.tryParse(_cashCtrl.text) ?? 0;
+      // Generate QR data using standardized service
+      final invoiceData = {
+        'no': _invoiceNo,
+        'invoice_prefix': _sendToZatca ? 'ZATCA' : 'INV_NO',
+        'date': _date,
+        'salesman': _salesmanCtrl.text,
+        'customer': _customerCtrl.text,
+        'customerVat': _customerVatCtrl.text,
+        'items': _items.map((it) => it.toMap()).toList(),
+        'vatPercent': _vatPercent,
+        'discount': double.tryParse(_discountCtrl.text) ?? 0,
+        'cash': double.tryParse(_cashCtrl.text) ?? 0,
+        'zatca_invoice': _sendToZatca,
+        'zatca_environment': _currentZatcaEnvironment,
+        'company_name': _companyDetails?.ownerName1 ?? 'Company Name',
+        'company_vat': _companyDetails?.vatNo ?? '',
+        'company_cr': _companyDetails?.crNumber ?? '',
+        'company_address': _companyDetails?.address ?? '',
+        'company_city': _companyDetails?.city ?? '',
+        'company_phone': _companyDetails?.phone ?? '',
+        'company_email': _companyDetails?.email ?? '',
+      };
 
-      final qrData = "INV:$_invoiceNo"
-          "|SALESMAN:${_salesmanCtrl.text}"
-          "|CUSTOMER:${_customerCtrl.text}"
-          "|VATNO:${_customerVatCtrl.text}"
-          "|DISCOUNT:${discountValue.toStringAsFixed(2)}"
-          "|VATAMOUNT:${vatAmount.toStringAsFixed(2)}"
-          "|TOTAL:${total.toStringAsFixed(2)}"
-          "|CASH:${cashValue.toStringAsFixed(2)}"
-          "|CHANGE:${(cashValue - total).toStringAsFixed(2)}"
-          "|DATE:$_date";
+      final qrData = QRService.generatePrintQRData(invoiceData);
+
+      // Calculate totals
+      final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
+      final discount = double.tryParse(_discountCtrl.text) ?? 0;
+      final vatAmount = _items.fold<double>(0, (sum, it) => sum + (it.quantity * it.rate * _vatPercent / 100));
+      final total = subtotal + vatAmount - discount;
 
       // Generate PDF
       final Uint8List pdfBytes = await InvoiceHelper.generatePdf(
-        invoiceNo: _invoiceNo,
+        invoiceNumber: '${_sendToZatca ? 'ZATCA' : 'INV_NO'}-${_sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo}',
+        invoiceData: invoiceData,
+        qrData: qrData,
+        customerName: _customerCtrl.text,
         date: _date,
+        items: _items.map((item) => item.toMap()).toList(),
+        total: total,
+        vatAmount: vatAmount,
+        subtotal: subtotal,
+        discount: discount,
+        vatPercent: _vatPercent.toString(),
+        companyDetails: _companyDetails?.toMap() ?? {},
         salesman: _salesmanCtrl.text,
+        cash: _cashCtrl.text,
         customer: _customerCtrl.text,
         vatNo: _customerVatCtrl.text,
-        items: _items,
-        vatPercent: _vatPercent,
-        discount: discountValue,
-        cash: cashValue,
-        companyDetails: _companyDetails,
-        qrData: qrData,
       );
 
       // Open and render using pdfx
@@ -621,7 +658,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
     }
   }
 
-  // FIXED: Print thermal invoice
+  // FIXED: Print thermal invoice with ZATCA retry mechanism
   Future<void> _printThermalInvoice() async {
     // Validate form
     if (!_formKey.currentState!.validate()) {
@@ -641,17 +678,230 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
     try {
       final mockPrinting = await _isMockPrinting();
 
-      // Generate invoice image
-      final imageData = await _generateInvoiceImage();
-      if (imageData == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate invoice image')),
+      // If this is a ZATCA invoice, sync with ZATCA BEFORE printing
+      if (_sendToZatca) {
+        // Show loading dialog with retry info
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Text('Syncing with ZATCA...'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Please wait while we verify your invoice with ZATCA...'),
+                SizedBox(height: 8),
+                Text('Attempt: 1/5', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ),
         );
-        return;
-      }
 
-      if (mockPrinting) {
-        // Show image preview for mock printing
+        // Generate invoice data for ZATCA sync
+        final invoiceData = {
+          'no': _invoiceNo,
+          'invoice_prefix': _sendToZatca ? 'ZATCA' : 'INV_NO',
+          'date': _date,
+          'salesman': _salesmanCtrl.text,
+          'customer': _customerCtrl.text,
+          'vatNo': _customerVatCtrl.text,
+          'items': _items.map((it) => it.toMap()).toList(),
+          'vatPercent': _vatPercent,
+          'discount': double.tryParse(_discountCtrl.text) ?? 0,
+          'cash': double.tryParse(_cashCtrl.text) ?? 0,
+          'zatca_invoice': _sendToZatca,
+          'zatca_environment': _currentZatcaEnvironment,
+          'company': {
+            'ownerName1': _companyDetails?.ownerName1 ?? 'Company Name',
+            'vatNo': _companyDetails?.vatNo ?? '',
+            'crNumber': _companyDetails?.crNumber ?? '',
+            'address': _companyDetails?.address ?? '',
+            'city': _companyDetails?.city ?? '',
+            'phone': _companyDetails?.phone ?? '',
+            'email': _companyDetails?.email ?? '',
+          },
+        };
+
+        // ZATCA retry mechanism
+        Map<String, dynamic>? zatcaResponse;
+        String? lastError;
+        
+        for (int attempt = 1; attempt <= 5; attempt++) {
+          try {
+            // Update loading dialog with attempt number
+            if (attempt > 1) {
+              Navigator.of(context).pop(); // Close previous dialog
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  title: Text('Retrying ZATCA Sync...'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Attempt: $attempt/5'),
+                      if (lastError != null) ...[
+                        SizedBox(height: 8),
+                        Text('Previous error: ${lastError!.substring(0, lastError!.length > 50 ? 50 : lastError!.length)}...', 
+                             style: TextStyle(fontSize: 10, color: Colors.red)),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            // Try ZATCA sync
+            zatcaResponse = await _supabaseService.callZatcaEdgeFunction(invoiceData);
+            
+            if (zatcaResponse['success'] == true) {
+              // ZATCA sync successful
+              Navigator.of(context).pop(); // Close loading dialog
+              
+              // Print with real ZATCA data
+              await _printWithZatcaData(invoiceData, zatcaResponse, mockPrinting);
+              
+              // Save with ZATCA data
+              await _saveToHistoryWithZatca(invoiceData, zatcaResponse);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('✅ Invoice printed with ZATCA verification!\nUUID: ${zatcaResponse['uuid']}'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 5),
+                ),
+              );
+              
+              await _incrementInvoice();
+              _resetForm();
+              return; // Success - exit function
+            } else {
+              lastError = zatcaResponse['error'] ?? 'Unknown error';
+              print('ZATCA attempt $attempt failed: $lastError');
+            }
+          } catch (e) {
+            lastError = e.toString();
+            print('ZATCA attempt $attempt exception: $lastError');
+          }
+          
+          // Wait before retry (except for last attempt)
+          if (attempt < 5) {
+            await Future.delayed(Duration(seconds: 2));
+          }
+        }
+
+        // All 5 attempts failed - show detailed error dialog
+        Navigator.of(context).pop(); // Close loading dialog
+        
+        await _showZatcaFailureDialog(lastError ?? 'Unknown error');
+        return; // Don't print - ZATCA verification failed
+
+      } else {
+        // Local invoice - print normally
+        await _printLocalInvoice(mockPrinting);
+        await _incrementInvoice();
+        _resetForm();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invoice processed successfully!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  // Show ZATCA failure dialog with detailed error and guidance
+  Future<void> _showZatcaFailureDialog(String error) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error, color: Colors.red),
+            SizedBox(width: 8),
+            Text('ZATCA Verification Failed'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'All 5 attempts to verify with ZATCA failed.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Error Details:',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+              ),
+              SizedBox(height: 8),
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  error,
+                  style: TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Possible Causes:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('• Network connectivity issues'),
+              Text('• ZATCA server temporarily unavailable'),
+              Text('• Invalid invoice data format'),
+              Text('• ZATCA credentials expired'),
+              SizedBox(height: 16),
+              Text(
+                'Solution:',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'If you still want to print this invoice, please:\n\n1. Turn OFF "Send to ZATCA" toggle\n2. Click Print again\n3. Invoice will print as Local invoice',
+                style: TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Print with ZATCA data
+  Future<void> _printWithZatcaData(Map<String, dynamic> invoiceData, Map<String, dynamic> zatcaResponse, bool mockPrinting) async {
+    final updatedInvoiceData = {
+      ...invoiceData,
+      'zatca_uuid': zatcaResponse['uuid'],
+      'zatca_qr_code': zatcaResponse['qr_code'],
+      'sync_status': 'completed',
+    };
+
+    if (mockPrinting) {
+      // Show image preview for mock printing with ZATCA data
+      final imageData = await _generateInvoiceImageWithZatca(updatedInvoiceData);
+      if (imageData != null) {
         await showDialog(
           context: context,
           builder: (context) => Dialog(
@@ -661,33 +911,226 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                 maxHeight: MediaQuery.of(context).size.height * 0.9,
               ),
               child: SingleChildScrollView(
-                child: Image.memory(imageData),
+                child: Column(
+                  children: [
+                    Image.memory(imageData),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          Text(
+                            '✅ ZATCA Verified Invoice',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'UUID: ${zatcaResponse['uuid']}',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            'Status: ${zatcaResponse['compliance_status']}',
+                            style: TextStyle(fontSize: 12, color: Colors.green),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         );
-      } else {
-        if (_printerSelectionService.selectedPrinter == null) {
-          _showPrinterDialog();
-          return;
-        }
-
-        // Print the image
-        await _printerService.printRasterImage(imageData);
+      }
+    } else {
+      if (_printerSelectionService.selectedPrinter == null) {
+        _showPrinterDialog();
+        return;
       }
 
-      // Save and reset
-      await _saveToHistory();
-      await _incrementInvoice();
-      _resetForm();
+      // Calculate totals
+      final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
+      final discount = double.tryParse(_discountCtrl.text) ?? 0;
+      final vatAmount = _items.fold<double>(0, (sum, it) => sum + (it.quantity * it.rate * _vatPercent / 100));
+      final total = subtotal + vatAmount - discount;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invoice processed successfully!')),
+      // Print with real ZATCA data
+      await _printerService.printInvoice(
+        invoiceNumber: '${_sendToZatca ? 'ZATCA' : 'INV_NO'}-${_sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo}',
+        invoiceData: updatedInvoiceData,
+        qrData: QRService.generatePrintQRData(updatedInvoiceData),
+        customerName: _customerCtrl.text,
+        date: _date,
+        items: _items.map((item) => item.toMap()).toList(),
+        total: total,
+        vatAmount: vatAmount,
+        subtotal: subtotal,
+        discount: double.tryParse(_discountCtrl.text) ?? 0,
+        vatPercent: _vatPercent.toString(),
+        companyDetails: _companyDetails?.toMap() ?? {},
       );
+    }
+  }
+
+  // Print local invoice
+  Future<void> _printLocalInvoice(bool mockPrinting) async {
+    final imageData = await _generateInvoiceImage();
+    if (imageData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to generate invoice image')),
+      );
+      return;
+    }
+
+    if (mockPrinting) {
+      await showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          insetPadding: const EdgeInsets.all(10),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.9,
+            ),
+            child: SingleChildScrollView(
+              child: Image.memory(imageData),
+            ),
+          ),
+        ),
+      );
+    } else {
+      if (_printerSelectionService.selectedPrinter == null) {
+        _showPrinterDialog();
+        return;
+      }
+
+      // Calculate totals
+      final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
+      final discount = double.tryParse(_discountCtrl.text) ?? 0;
+      final vatAmount = _items.fold<double>(0, (sum, it) => sum + (it.quantity * it.rate * _vatPercent / 100));
+      final total = subtotal + vatAmount - discount;
+
+      await _printerService.printInvoice(
+        invoiceNumber: '${_sendToZatca ? 'ZATCA' : 'INV_NO'}-${_sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo}',
+        invoiceData: {
+          'no': _invoiceNo,
+          'invoice_prefix': _sendToZatca ? 'ZATCA' : 'INV_NO',
+          'date': _date,
+          'salesman': _salesmanCtrl.text,
+          'customer': _customerCtrl.text,
+          'customerVat': _customerVatCtrl.text,
+          'items': _items.map((it) => it.toMap()).toList(),
+          'vatPercent': _vatPercent,
+          'discount': double.tryParse(_discountCtrl.text) ?? 0,
+          'cash': double.tryParse(_cashCtrl.text) ?? 0,
+          'zatca_invoice': _sendToZatca,
+          'zatca_environment': _currentZatcaEnvironment,
+          'company_name': _companyDetails?.ownerName1 ?? 'Company Name',
+          'company_vat': _companyDetails?.vatNo ?? '',
+          'company_cr': _companyDetails?.crNumber ?? '',
+          'company_address': _companyDetails?.address ?? '',
+          'company_city': _companyDetails?.city ?? '',
+          'company_phone': _companyDetails?.phone ?? '',
+          'company_email': _companyDetails?.email ?? '',
+        },
+        qrData: QRService.generatePrintQRData({
+          'no': _invoiceNo,
+          'invoice_prefix': _sendToZatca ? 'ZATCA' : 'INV_NO',
+          'date': _date,
+          'salesman': _salesmanCtrl.text,
+          'customer': _customerCtrl.text,
+          'customerVat': _customerVatCtrl.text,
+          'items': _items.map((it) => it.toMap()).toList(),
+          'vatPercent': _vatPercent,
+          'discount': double.tryParse(_discountCtrl.text) ?? 0,
+          'cash': double.tryParse(_cashCtrl.text) ?? 0,
+          'zatca_invoice': _sendToZatca,
+          'zatca_environment': _currentZatcaEnvironment,
+          'company_name': _companyDetails?.ownerName1 ?? 'Company Name',
+          'company_vat': _companyDetails?.vatNo ?? '',
+          'company_cr': _companyDetails?.crNumber ?? '',
+          'company_address': _companyDetails?.address ?? '',
+          'company_city': _companyDetails?.city ?? '',
+          'company_phone': _companyDetails?.phone ?? '',
+          'company_email': _companyDetails?.email ?? '',
+        }),
+        customerName: _customerCtrl.text,
+        date: _date,
+        items: _items.map((item) => item.toMap()).toList(),
+        total: total,
+        vatAmount: vatAmount,
+        subtotal: subtotal,
+        discount: double.tryParse(_discountCtrl.text) ?? 0,
+        vatPercent: _vatPercent.toString(),
+        companyDetails: _companyDetails?.toMap() ?? {},
+      );
+    }
+  }
+
+  // Save invoice with ZATCA data
+  Future<void> _saveToHistoryWithZatca(Map<String, dynamic> invoiceData, Map<String, dynamic> zatcaResponse) async {
+    // Determine invoice number based on ZATCA toggle
+    final invoiceNumber = _sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo;
+    final invoicePrefix = _sendToZatca ? 'ZATCA' : 'INV_NO';
+    
+    // Calculate totals
+    final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
+    final discount = double.tryParse(_discountCtrl.text) ?? 0;
+    final vatAmount = _items.fold<double>(0, (sum, it) => sum + (it.quantity * it.rate * _vatPercent / 100));
+    final total = subtotal + vatAmount - discount;
+    
+    final record = {
+      'no': invoiceNumber,
+      'invoice_prefix': invoicePrefix,
+      'date': _date,
+      'salesman': _salesmanCtrl.text,
+      'customer': _customerCtrl.text,
+      'vatNo': _customerVatCtrl.text,
+      'items': _items.map((it) => it.toMap()).toList(),
+      'vatPercent': _vatPercent,
+      'discount': discount,
+      'cash': double.tryParse(_cashCtrl.text) ?? 0,
+      'total': total,
+      'vatAmount': vatAmount,
+      'subtotal': subtotal,
+      'zatca_invoice': _sendToZatca,
+      'zatca_environment': _sendToZatca ? _currentZatcaEnvironment : null,
+      'sync_status': 'completed', // Already synced
+      'created_at': DateTime.now().toIso8601String(),
+      'synced_at': DateTime.now().toIso8601String(),
+      // ZATCA data
+      'zatca_uuid': zatcaResponse['uuid'],
+      'zatca_qr_code': zatcaResponse['qr_code'],
+      'zatca_response': jsonEncode(zatcaResponse),
+      // Company details
+      'company': invoiceData['company'],
+    };
+    
+    _history.add(record);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('invoices', _history.map((e) => jsonEncode(e)).toList());
+    
+    // Increment the appropriate invoice counter
+    if (_sendToZatca) {
+      _zatcaInvoiceNo++;
+      await prefs.setInt('zatcaStartInvoice', _zatcaInvoiceNo);
+    } else {
+      _localInvoiceNo++;
+      await prefs.setInt('localStartInvoice', _localInvoiceNo);
+    }
+  }
+
+  // Generate invoice image with ZATCA data
+  Future<Uint8List?> _generateInvoiceImageWithZatca(Map<String, dynamic> invoiceData) async {
+    try {
+      // Similar to _generateInvoiceImage but with ZATCA data
+      final imageData = await _generateInvoiceImage();
+      return imageData;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      print('Error generating invoice image with ZATCA: $e');
+      return null;
     }
   }
 
@@ -822,7 +1265,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                               SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Invoice will be sent to ZATCA system. Number: ${_sendToZatca ? "ZATCA-$_zatcaInvoiceNo" : "LOCAL-$_localInvoiceNo"}',
+                                  'Invoice Number: ${_sendToZatca ? "ZATCA-$_zatcaInvoiceNo" : "INV_NO-$_localInvoiceNo"}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.green[700],
