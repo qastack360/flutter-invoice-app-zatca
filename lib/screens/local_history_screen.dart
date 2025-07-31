@@ -256,7 +256,10 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
           children: [
             IconButton(
               icon: Icon(Icons.print, color: Colors.green),
-              onPressed: () => _printInvoice(invoice),
+              onPressed: () async {
+                print('Print button pressed for invoice ${invoice['no']}');
+                await _printInvoice(invoice);
+              },
             ),
             IconButton(
               icon: Icon(Icons.qr_code, size: 32, color: Colors.blue),
@@ -359,14 +362,20 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
 
   Future<void> _printInvoice(Map<String, dynamic> invoice) async {
     try {
+      print('Print button clicked for invoice: ${invoice['no']}');
+      
       // Check mock printing setting
       final prefs = await SharedPreferences.getInstance();
       final mockPrinting = prefs.getBool('mockPrinting') ?? false;
       
+      print('Mock printing setting: $mockPrinting');
+      
       if (mockPrinting) {
+        print('Mock mode ON - showing preview');
         // Show preview for mock printing
         final imageData = await _generateInvoiceImage(invoice);
         if (imageData != null) {
+          print('Image generated successfully, showing dialog');
           await showDialog(
             context: context,
             builder: (context) => Dialog(
@@ -384,8 +393,46 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
               ),
             ),
           );
+        } else {
+          print('Failed to generate image, showing error');
+          // Show a simple text preview as fallback
+          await showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              insetPadding: const EdgeInsets.all(10),
+              child: Container(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Invoice Preview (Mock Mode)',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 20),
+                    Text('Invoice #: ${invoice['invoice_prefix'] ?? 'INV_NO'}-${invoice['no']}'),
+                    Text('Customer: ${invoice['customer']}'),
+                    Text('Date: ${invoice['date']}'),
+                    Text('Total: SAR ${(invoice['total'] ?? 0.0).toStringAsFixed(2)}'),
+                    SizedBox(height: 20),
+                    Text(
+                      'This is a mock preview. In real printing, this would be sent to the thermal printer.',
+                      style: TextStyle(fontStyle: FontStyle.italic),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
       } else {
+        print('Mock mode OFF - checking printer connection');
         // Check if printer is connected for real printing
         final isConnected = await _checkPrinterConnection();
         
@@ -412,6 +459,7 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
       }
       
     } catch (e) {
+      print('Print error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Print failed: $e'),
@@ -586,6 +634,19 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
         title: Text('Local History / السجل المحلي'),
         backgroundColor: Colors.blue,
         actions: [
+          IconButton(
+            icon: Icon(Icons.settings),
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              final mockPrinting = prefs.getBool('mockPrinting') ?? false;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Mock Mode: ${mockPrinting ? "ON" : "OFF"}'),
+                  backgroundColor: mockPrinting ? Colors.green : Colors.orange,
+                ),
+              );
+            },
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'csv') {
