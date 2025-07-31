@@ -6,7 +6,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../db/database_helper.dart';
 import '../models/company_details.dart';
 import '../models/item_data.dart';
 import '../utils/invoice_helper.dart';

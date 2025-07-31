@@ -6,7 +6,7 @@ import '../models/invoice_settings.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_service.dart';
 import '../config/app_config.dart';
-import 'company_details_screen.dart';
+import 'company_details.dart';
 import 'invoice_settings_screen.dart';
 import 'zatca_settings_screen.dart';
 import 'sync_settings_screen.dart';
