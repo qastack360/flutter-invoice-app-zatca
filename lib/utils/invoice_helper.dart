@@ -95,6 +95,25 @@ class InvoiceHelper {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
+                // ZATCA Verification Status (at the top, before company details)
+                if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
+                  pw.Container(
+                    padding: pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.white,
+                      border: pw.Border.all(color: PdfColors.black, width: 1),
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Row(
+                      children: [
+                        pw.Text('✅ ', style: pw.TextStyle(fontSize: 12, color: PdfColors.black)),
+                        buildText('ZATCA Verified Invoice', size: 12, bold: true),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                ],
+
                 // Company header with larger fonts
                 if (companyDetails != null) ...[
                   pw.Center(
@@ -147,25 +166,61 @@ class InvoiceHelper {
                   ),
                 ],
 
-                // ZATCA Verification Status (after company details, thermal-friendly colors)
-                if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
-                  pw.SizedBox(height: 5),
-                  pw.Container(
-                    padding: pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(
-                      color: PdfColors.white,
-                      border: pw.Border.all(color: PdfColors.black, width: 1),
-                      borderRadius: pw.BorderRadius.circular(4),
-                    ),
-                    child: pw.Row(
-                      children: [
-                        pw.Text('✅ ', style: pw.TextStyle(fontSize: 12, color: PdfColors.black)),
-                        buildText('ZATCA Verified Invoice', size: 12, bold: true),
-                      ],
-                    ),
+                // Invoice Details Section (Date, Invoice Number, Customer, etc.)
+                pw.Container(
+                  padding: pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                    border: pw.Border.all(color: PdfColors.black, width: 1),
                   ),
-                  pw.SizedBox(height: 5),
-                ],
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          buildText('Date / التاريخ', size: 10, bold: true),
+                          buildText(invoiceData['date'] ?? '', size: 10),
+                        ],
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          buildText('Invoice / الفاتورة', size: 10, bold: true),
+                          buildText('${invoiceData['invoice_prefix'] ?? 'INV'}-${invoiceData['no']}', size: 10),
+                        ],
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          buildText('Customer / العميل', size: 10, bold: true),
+                          buildText(invoiceData['customer'] ?? '', size: 10),
+                        ],
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          buildText('Salesman / البائع', size: 10, bold: true),
+                          buildText(invoiceData['salesman'] ?? '', size: 10),
+                        ],
+                      ),
+                      if ((invoiceData['vatNo'] ?? '').isNotEmpty) ...[
+                        pw.SizedBox(height: 3),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            buildText('Customer VAT / ضريبة العميل', size: 10, bold: true),
+                            buildText(invoiceData['vatNo'] ?? '', size: 10),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 5),
 
                 // ZATCA Details Section (only for ZATCA invoices)
                 if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
