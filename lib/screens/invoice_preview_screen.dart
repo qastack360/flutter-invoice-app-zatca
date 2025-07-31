@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:typed_data';
+import 'package:pdfx/pdfx.dart' as pdfx;
 import '../models/item_data.dart';
 import '../utils/invoice_helper.dart';
 import '../services/printer_service.dart';
@@ -9,7 +12,6 @@ import '../services/qr_service.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'dart:convert';
-import 'dart:typed_data';
 
 class InvoicePreviewScreen extends StatefulWidget {
   final Map<String, dynamic> invoice;
@@ -453,54 +455,125 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     });
 
     try {
-      // Check if printer is connected
-      final isConnected = await _checkPrinterConnection();
+      // Check mock printing setting
+      final prefs = await SharedPreferences.getInstance();
+      final mockPrinting = prefs.getBool('mockPrinting') ?? false;
       
-      if (!isConnected) {
+      print('Invoice Preview - Mock printing setting: $mockPrinting');
+      
+      if (mockPrinting) {
+        print('Mock mode ON - showing preview');
+        // Show preview for mock printing
+        final imageData = await _generateInvoiceImage();
+        if (imageData != null) {
+          print('Image generated successfully, showing dialog');
+          await showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              insetPadding: const EdgeInsets.all(10),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
+                child: SingleChildScrollView(
+                  child: Container(
+                    color: Colors.white,
+                    child: Image.memory(imageData),
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else {
+          print('Failed to generate image, showing fallback');
+          // Show a simple text preview as fallback
+          await showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              insetPadding: const EdgeInsets.all(10),
+              child: Container(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Invoice Preview (Mock Mode)',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 20),
+                    Text('Invoice #: ${widget.invoice['invoice_prefix'] ?? 'INV'}-${widget.invoice['no']}'),
+                    Text('Customer: ${widget.invoice['customer']}'),
+                    Text('Date: ${widget.invoice['date']}'),
+                    Text('Total: SAR ${(widget.invoice['total'] ?? 0.0).toStringAsFixed(2)}'),
+                    SizedBox(height: 20),
+                    Text(
+                      'This is a mock preview. In real printing, this would be sent to the thermal printer.',
+                      style: TextStyle(fontStyle: FontStyle.italic),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+      } else {
+        print('Mock mode OFF - checking printer connection');
+        // Check if printer is connected for real printing
+        final isConnected = await _checkPrinterConnection();
+        
+        if (!isConnected) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Printer not connected. Please connect a printer first.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        // Get invoice data
+        final invoice = widget.invoice;
+        final items = (invoice['items'] as List<dynamic>)
+            .map((item) => ItemData.fromMap(item as Map<String, dynamic>))
+            .toList();
+        
+        final totalAmount = items.fold<double>(0, (sum, item) => sum + (item.quantity * item.rate));
+        final vatAmount = totalAmount * (invoice['vatPercent'] ?? 15) / 100;
+        final discount = invoice['discount'] ?? 0.0;
+        final finalAmount = totalAmount + vatAmount - discount;
+
+        // Print the invoice using the bluetooth service
+        await _bluetoothPrinterService.printInvoice(
+          invoiceNumber: '${invoice['invoice_prefix'] ?? 'INV'}-${invoice['no']}',
+          invoiceData: invoice,
+          qrData: QRService.generatePrintQRData(invoice),
+          customerName: invoice['customer'],
+          date: invoice['date'],
+          items: items.map((item) => item.toMap()).toList(),
+          total: finalAmount,
+          vatAmount: vatAmount,
+          subtotal: totalAmount,
+          discount: discount,
+          vatPercent: (invoice['vatPercent'] ?? 15.0).toString(),
+          companyDetails: {}, // TODO: Load company details
+        );
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Printer not connected. Please connect a printer first.'),
-            backgroundColor: Colors.orange,
+            content: Text('Invoice printed successfully!'),
+            backgroundColor: Colors.green,
           ),
         );
-        return;
       }
-
-      // Get invoice data
-      final invoice = widget.invoice;
-      final items = (invoice['items'] as List<dynamic>)
-          .map((item) => ItemData.fromMap(item as Map<String, dynamic>))
-          .toList();
-      
-      final totalAmount = items.fold<double>(0, (sum, item) => sum + (item.quantity * item.rate));
-      final vatAmount = totalAmount * (invoice['vatPercent'] ?? 15) / 100;
-      final discount = invoice['discount'] ?? 0.0;
-      final finalAmount = totalAmount + vatAmount - discount;
-
-      // Print the invoice using the bluetooth service
-      await _bluetoothPrinterService.printInvoice(
-        invoiceNumber: '${invoice['invoice_prefix'] ?? 'INV'}-${invoice['no']}',
-        invoiceData: invoice,
-        qrData: QRService.generatePrintQRData(invoice),
-        customerName: invoice['customer'],
-        date: invoice['date'],
-        items: items.map((item) => item.toMap()).toList(),
-        total: finalAmount,
-        vatAmount: vatAmount,
-        subtotal: totalAmount,
-        discount: discount,
-        vatPercent: (invoice['vatPercent'] ?? 15.0).toString(),
-        companyDetails: {}, // TODO: Load company details
-      );
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invoice printed successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
       
     } catch (e) {
+      print('Print error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Print failed: $e'),
@@ -511,6 +584,58 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
       setState(() {
         _isPrinting = false;
       });
+    }
+  }
+
+  // Generate invoice image for preview
+  Future<Uint8List?> _generateInvoiceImage() async {
+    try {
+      final invoice = widget.invoice;
+      final items = (invoice['items'] as List<dynamic>)
+          .map((item) => ItemData.fromMap(item as Map<String, dynamic>))
+          .toList();
+      
+      final totalAmount = items.fold<double>(0, (sum, item) => sum + (item.quantity * item.rate));
+      final vatAmount = totalAmount * (invoice['vatPercent'] ?? 15) / 100;
+      final discount = invoice['discount'] ?? 0.0;
+      final finalAmount = totalAmount + vatAmount - discount;
+
+      // Generate PDF with invoice data
+      final Uint8List pdfBytes = await InvoiceHelper.generatePdf(
+        invoiceNumber: '${invoice['invoice_prefix'] ?? 'INV'}-${invoice['no']}',
+        invoiceData: invoice,
+        qrData: QRService.generatePrintQRData(invoice),
+        customerName: invoice['customer'] ?? '',
+        date: invoice['date'] ?? '',
+        items: items.map((item) => item.toMap()).toList(),
+        total: finalAmount,
+        vatAmount: vatAmount,
+        subtotal: totalAmount,
+        discount: discount,
+        vatPercent: (invoice['vatPercent'] ?? 15.0).toString(),
+        companyDetails: (invoice['company'] as Map<String, dynamic>?) ?? {},
+        salesman: invoice['salesman'] ?? '',
+        cash: invoice['cash']?.toString() ?? '',
+        customer: invoice['customer'] ?? '',
+        vatNo: invoice['vatNo'] ?? '',
+      );
+
+      // Open and render using pdfx
+      final doc = await pdfx.PdfDocument.openData(pdfBytes);
+      final page = await doc.getPage(1);
+      final pageImage = await page.render(
+        width: (page.width * 3).toDouble(),
+        height: (page.height * 3).toDouble(),
+      );
+
+      final imageData = pageImage?.bytes;
+      await page.close();
+      await doc.close();
+
+      return imageData;
+    } catch (e) {
+      print('Error generating invoice image: $e');
+      return null;
     }
   }
 

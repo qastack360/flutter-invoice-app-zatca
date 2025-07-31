@@ -202,7 +202,7 @@ class InvoiceHelper {
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
                             buildText('Status:', size: 10, bold: true),
-                            buildText(invoiceData['zatca_response']?['compliance_status'] ?? 'approved', size: 10),
+                            buildText((invoiceData['zatca_response']?['compliance_status'] ?? 'approved').toString(), size: 10),
                           ],
                         ),
                       ],
