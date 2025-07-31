@@ -91,7 +91,7 @@ class InvoiceHelper {
           final change = (double.tryParse(cash ?? '0') ?? 0) - total;
 
           return pw.Container(
-            color: PdfColors.grey200,
+            color: PdfColors.white, // White background for thermal printer
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -155,7 +155,61 @@ class InvoiceHelper {
                   ['Customer / اسم العميل', customer ?? ''],
                   if ((vatNo ?? '').isNotEmpty) ['VAT No / رقم ضريبي', vatNo ?? ''],
                 ], buildText),
+                
+                // ZATCA Verification Status (if ZATCA invoice)
+                if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
+                  pw.SizedBox(height: 3),
+                  pw.Container(
+                    width: double.infinity,
+                    padding: pw.EdgeInsets.all(4),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.white,
+                      border: pw.Border.all(color: PdfColors.black, width: 1),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.center,
+                      children: [
+                        buildText('✅ ', size: 12, bold: true),
+                        buildText('ZATCA Verified / تم التحقق من ضريبة القيمة المضافة', size: 12, bold: true),
+                      ],
+                    ),
+                  ),
+                ],
+                
                 pw.SizedBox(height: 5),
+
+                // ZATCA Details Section (only for ZATCA invoices)
+                if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
+                  pw.Container(
+                    width: double.infinity,
+                    padding: pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.white,
+                      border: pw.Border.all(color: PdfColors.black, width: 1),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            buildText('UUID:', size: 10, bold: true),
+                            buildText(invoiceData['zatca_uuid'] ?? 'N/A', size: 10),
+                          ],
+                        ),
+                        pw.SizedBox(height: 3),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            buildText('Status:', size: 10, bold: true),
+                            buildText(invoiceData['zatca_response']?['compliance_status'] ?? 'approved', size: 10),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                ],
 
                 // Items table with optimized rendering
                 _itemsTable(items, double.parse(vatPercent), buildText),
@@ -177,17 +231,30 @@ class InvoiceHelper {
                   ]),
                 ),
                 pw.SizedBox(height: 5),
+                // QR Code (simplified for ZATCA app)
                 pw.Center(
                   child: pw.Container(
-                    color: PdfColors.grey200,
+                    color: PdfColors.white,
                     child: pw.BarcodeWidget(
                       barcode: pw.Barcode.qrCode(),
                       data: jsonEncode(qrData),
-                      width: 170, // Optimized QR size
-                      height: 170,
+                      width: 150, // Slightly smaller for faster scanning
+                      height: 150,
                     ),
                   ),
                 ),
+                
+                // ZATCA Verification Message (only for ZATCA invoices)
+                if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
+                  pw.SizedBox(height: 5),
+                  pw.Center(
+                    child: buildText(
+                      'This invoice is now verified with ZATCA and can be scanned with the ZATCA mobile app.',
+                      size: 10,
+                      align: pw.TextAlign.center,
+                    ),
+                  ),
+                ],
               ],
             ),
           );
@@ -250,7 +317,7 @@ class InvoiceHelper {
       children: [
         pw.TableRow(
           decoration: const pw.BoxDecoration(
-            color: PdfColors.grey300,
+            color: PdfColors.white,
           ),
           children: [
             buildText('Sr', size: 10, bold: true, align: pw.TextAlign.center),

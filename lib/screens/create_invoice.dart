@@ -963,17 +963,20 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    // Invoice Preview Image
-                    Image.memory(imageData),
+                    // Invoice Preview Image (Thermal Printer Format)
+                    Container(
+                      color: Colors.white,
+                      child: Image.memory(imageData),
+                    ),
                     
                     // ZATCA Information
                     Container(
                       width: double.infinity,
                       padding: EdgeInsets.all(16.0),
                       decoration: BoxDecoration(
-                        color: Colors.green[50],
+                        color: Colors.white,
                         border: Border(
-                          top: BorderSide(color: Colors.green[200]!),
+                          top: BorderSide(color: Colors.black, width: 1),
                         ),
                       ),
                       child: Column(
@@ -981,13 +984,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.verified, color: Colors.green[700]),
+                              Icon(Icons.verified, color: Colors.black),
                               SizedBox(width: 8),
                               Text(
                                 '✅ ZATCA Verified Invoice',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.green[700],
+                                  color: Colors.black,
                                   fontSize: 16,
                                 ),
                               ),
@@ -1001,7 +1004,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green[200]!),
+                              border: Border.all(color: Colors.black, width: 1),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1010,34 +1013,35 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                                   'ZATCA Details:',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.green[700],
+                                    color: Colors.black,
                                   ),
                                 ),
                                 SizedBox(height: 8),
-                                Text('UUID: ${zatcaResponse['uuid'] ?? 'N/A'}'),
-                                Text('Status: ${zatcaResponse['compliance_status'] ?? 'N/A'}'),
-                                Text('Environment: ${updatedInvoiceData['zatca_environment'] ?? 'live'}'),
+                                Text('UUID: ${zatcaResponse['uuid'] ?? 'N/A'}', style: TextStyle(color: Colors.black)),
+                                Text('Status: ${zatcaResponse['compliance_status'] ?? 'N/A'}', style: TextStyle(color: Colors.black)),
+                                Text('Environment: ${updatedInvoiceData['zatca_environment'] ?? 'live'}', style: TextStyle(color: Colors.black)),
                                 SizedBox(height: 8),
                                 Text(
                                   'QR Code Data:',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.blue[700],
+                                    color: Colors.black,
                                   ),
                                 ),
                                 SizedBox(height: 4),
                                 Container(
                                   padding: EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey[100],
+                                    color: Colors.white,
                                     borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.black, width: 1),
                                   ),
                                   child: Text(
                                     'Contains ZATCA UUID for verification',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontFamily: 'monospace',
-                                      color: Colors.grey[700],
+                                      color: Colors.black,
                                     ),
                                   ),
                                 ),
@@ -1050,7 +1054,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                             'This invoice is now verified with ZATCA and can be scanned with the ZATCA mobile app.',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.green[600],
+                              color: Colors.black,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -1080,7 +1084,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       await _printerService.printInvoice(
         invoiceNumber: '${_sendToZatca ? 'ZATCA' : 'INV_NO'}-${_sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo}',
         invoiceData: updatedInvoiceData,
-        qrData: QRService.generatePrintQRData(updatedInvoiceData),
+        qrData: _sendToZatca 
+            ? QRService.generateSimplifiedZatcaQRData(updatedInvoiceData)
+            : QRService.generatePrintQRData(updatedInvoiceData),
         customerName: _customerCtrl.text,
         date: _date,
         items: _items.map((item) => item.toMap()).toList(),
@@ -1114,7 +1120,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
               maxHeight: MediaQuery.of(context).size.height * 0.9,
             ),
             child: SingleChildScrollView(
-              child: Image.memory(imageData),
+              child: Container(
+                color: Colors.white,
+                child: Image.memory(imageData),
+              ),
             ),
           ),
         ),
@@ -1254,7 +1263,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       final Uint8List pdfBytes = await InvoiceHelper.generatePdf(
         invoiceNumber: '${_sendToZatca ? 'ZATCA' : 'INV_NO'}-${_sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo}',
         invoiceData: invoiceData,
-        qrData: QRService.generatePrintQRData(invoiceData),
+        qrData: _sendToZatca 
+            ? QRService.generateSimplifiedZatcaQRData(invoiceData)
+            : QRService.generatePrintQRData(invoiceData), // Use existing QR data for local invoices
         customerName: _customerCtrl.text,
         date: _date,
         items: _items.map((item) => item.toMap()).toList(),

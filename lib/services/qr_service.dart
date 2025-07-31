@@ -91,6 +91,35 @@ class QRService {
     }
   }
 
+  // Generate simplified QR code data for ZATCA app (fast scanning)
+  static Map<String, dynamic> generateSimplifiedZatcaQRData(Map<String, dynamic> invoiceData) {
+    // Calculate total from items if not provided
+    double total = 0.0;
+    if (invoiceData['total'] != null) {
+      total = (invoiceData['total'] as num).toDouble();
+    } else if (invoiceData['items'] != null) {
+      final items = invoiceData['items'] as List<dynamic>;
+      for (var item in items) {
+        double quantity = (item['quantity'] ?? 0).toDouble();
+        double rate = (item['rate'] ?? 0).toDouble();
+        double vatPercent = (invoiceData['vatPercent'] ?? 15.0).toDouble();
+        double itemTotal = quantity * rate;
+        double itemVat = itemTotal * (vatPercent / 100);
+        total += itemTotal + itemVat;
+      }
+    }
+    
+    // Only essential data for ZATCA mobile app
+    return {
+      'uuid': invoiceData['zatca_uuid'] ?? '',
+      'invoice_number': '${invoiceData['invoice_prefix'] ?? 'INV'}-${invoiceData['no']}',
+      'total': total.toStringAsFixed(2),
+      'date': invoiceData['date'] ?? DateTime.now().toString().substring(0, 10),
+      'status': invoiceData['zatca_response']?['compliance_status'] ?? 'verified',
+      'type': 'ZATCA',
+    };
+  }
+
   // Generate QR data for printing (includes ZATCA UUID if available)
   static Map<String, dynamic> generatePrintQRData(Map<String, dynamic> invoiceData) {
     // Ensure all required fields for ZATCA mobile app compatibility
