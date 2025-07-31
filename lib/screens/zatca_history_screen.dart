@@ -60,6 +60,32 @@ class _ZatcaHistoryScreenState extends State<ZatcaHistoryScreen> {
       List<Map<String, dynamic>> serverInvoices = [];
       try {
         serverInvoices = await _supabaseService.loadInvoices();
+        // Normalize server data structure to match local structure
+        serverInvoices = serverInvoices.map((invoice) {
+          return {
+            'no': invoice['invoice_number'] ?? '',
+            'invoice_prefix': invoice['invoice_prefix'] ?? '',
+            'date': invoice['invoice_date'] ?? '',
+            'customer': invoice['customer_name'] ?? '',
+            'salesman': invoice['salesman'] ?? '',
+            'vatNo': invoice['vat_number'] ?? '',
+            'total': invoice['total_amount'] ?? 0.0,
+            'vatAmount': invoice['vat_amount'] ?? 0.0,
+            'subtotal': invoice['subtotal'] ?? 0.0,
+            'discount': invoice['discount'] ?? 0.0,
+            'cash': invoice['cash'] ?? 0.0,
+            'items': invoice['items'] != null ? jsonDecode(invoice['items']) : [],
+            'company': invoice['company_details'] != null ? jsonDecode(invoice['company_details']) : {},
+            'zatca_invoice': invoice['zatca_invoice'] ?? false,
+            'zatca_uuid': invoice['zatca_uuid'] ?? '',
+            'zatca_environment': invoice['zatca_environment'] ?? 'live',
+            'zatca_response': invoice['zatca_response'] ?? '',
+            'sync_status': invoice['sync_status'] ?? 'pending',
+            'created_at': invoice['created_at'] ?? '',
+            'id': invoice['id'] ?? '',
+          };
+        }).toList();
+        
         // Filter for ZATCA invoices only
         serverInvoices = serverInvoices.where((invoice) {
           final isZatca = invoice['zatca_invoice'] == true;

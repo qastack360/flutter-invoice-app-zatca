@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/item_data.dart';
+import '../services/supabase_service.dart';
 import 'zatca_history_screen.dart';
 import 'local_history_screen.dart';
 import 'invoice_preview_screen.dart';
@@ -18,6 +19,7 @@ class CategorizedHistoryScreen extends StatefulWidget {
 class _CategorizedHistoryScreenState extends State<CategorizedHistoryScreen> {
   List<Map<String, dynamic>> _allInvoices = [];
   bool _isLoading = true;
+  final SupabaseService _supabaseService = SupabaseService();
 
   @override
   void initState() {
@@ -38,10 +40,48 @@ class _CategorizedHistoryScreenState extends State<CategorizedHistoryScreen> {
 
   Future<void> _loadAllInvoices() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = prefs.getStringList('invoices') ?? [];
       setState(() {
-        _allInvoices = data.map((s) => jsonDecode(s) as Map<String, dynamic>).toList();
+        _isLoading = true;
+      });
+
+      List<Map<String, dynamic>> serverInvoices = [];
+      List<Map<String, dynamic>> localInvoices = [];
+
+      // Load from server
+      try {
+        serverInvoices = await _supabaseService.loadInvoices();
+      } catch (e) {
+        print('Error loading from server: $e');
+      }
+
+      // Load from local storage
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final data = prefs.getStringList('invoices') ?? [];
+        localInvoices = data.map((s) => jsonDecode(s) as Map<String, dynamic>).toList();
+      } catch (e) {
+        print('Error loading from local storage: $e');
+      }
+
+      // Combine server and local invoices, avoiding duplicates
+      final Map<String, Map<String, dynamic>> combinedInvoices = {};
+      
+      // Add server invoices first
+      for (var invoice in serverInvoices) {
+        final key = '${invoice['invoice_number']}-${invoice['invoice_date']}';
+        combinedInvoices[key] = invoice;
+      }
+      
+      // Add local invoices (only if not already in server)
+      for (var invoice in localInvoices) {
+        final key = '${invoice['no']}-${invoice['date']}';
+        if (!combinedInvoices.containsKey(key)) {
+          combinedInvoices[key] = invoice;
+        }
+      }
+
+      setState(() {
+        _allInvoices = combinedInvoices.values.toList();
         _isLoading = false;
       });
     } catch (e) {
