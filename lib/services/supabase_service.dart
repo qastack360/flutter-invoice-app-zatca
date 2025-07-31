@@ -107,6 +107,94 @@ class SupabaseService {
     }
   }
 
+  // Save company details to Supabase
+  Future<Map<String, dynamic>> saveCompanyDetails(Map<String, dynamic> companyData) async {
+    try {
+      // Check if company details already exist
+      final existing = await _supabase
+          .from('company_details')
+          .select()
+          .eq('user_id', _supabase.auth.currentUser?.id ?? 'default')
+          .maybeSingle();
+
+      Map<String, dynamic> response;
+      
+      if (existing != null) {
+        // Update existing record
+        response = await _supabase
+            .from('company_details')
+            .update({
+              'owner_name1': companyData['ownerName1'] ?? '',
+              'owner_name2': companyData['ownerName2'] ?? '',
+              'other_name': companyData['otherName'] ?? '',
+              'phone': companyData['phone'] ?? '',
+              'vat_no': companyData['vatNo'] ?? '',
+              'cr_number': companyData['crNumber'] ?? '',
+              'address': companyData['address'] ?? '',
+              'city': companyData['city'] ?? '',
+              'email': companyData['email'] ?? '',
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('user_id', _supabase.auth.currentUser?.id ?? 'default')
+            .select()
+            .single();
+      } else {
+        // Insert new record
+        response = await _supabase
+            .from('company_details')
+            .insert({
+              'user_id': _supabase.auth.currentUser?.id ?? 'default',
+              'owner_name1': companyData['ownerName1'] ?? '',
+              'owner_name2': companyData['ownerName2'] ?? '',
+              'other_name': companyData['otherName'] ?? '',
+              'phone': companyData['phone'] ?? '',
+              'vat_no': companyData['vatNo'] ?? '',
+              'cr_number': companyData['crNumber'] ?? '',
+              'address': companyData['address'] ?? '',
+              'city': companyData['city'] ?? '',
+              'email': companyData['email'] ?? '',
+              'created_at': DateTime.now().toIso8601String(),
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .select()
+            .single();
+      }
+
+      return response;
+    } catch (e) {
+      throw Exception('Failed to save company details: $e');
+    }
+  }
+
+  // Load company details from Supabase
+  Future<Map<String, dynamic>?> loadCompanyDetails() async {
+    try {
+      final response = await _supabase
+          .from('company_details')
+          .select()
+          .eq('user_id', _supabase.auth.currentUser?.id ?? 'default')
+          .maybeSingle();
+
+      if (response != null) {
+        return {
+          'ownerName1': response['owner_name1'] ?? '',
+          'ownerName2': response['owner_name2'] ?? '',
+          'otherName': response['other_name'] ?? '',
+          'phone': response['phone'] ?? '',
+          'vatNo': response['vat_no'] ?? '',
+          'crNumber': response['cr_number'] ?? '',
+          'address': response['address'] ?? '',
+          'city': response['city'] ?? '',
+          'email': response['email'] ?? '',
+        };
+      }
+      return null;
+    } catch (e) {
+      print('Error loading company details: $e');
+      return null;
+    }
+  }
+
   // Get all invoices from Supabase
   Future<List<Map<String, dynamic>>> getAllInvoices() async {
     try {

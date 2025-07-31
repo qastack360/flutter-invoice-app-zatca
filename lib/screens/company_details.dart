@@ -35,42 +35,53 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
 
   Future<void> _loadCompanyDetails() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _owner1Ctrl.text = prefs.getString('company_owner1') ?? '';
-        _owner2Ctrl.text = prefs.getString('company_owner2') ?? '';
-        _otherCtrl.text = prefs.getString('company_other') ?? '';
-        _phoneCtrl.text = prefs.getString('company_phone') ?? '';
-        _vatCtrl.text = prefs.getString('company_vat') ?? '';
-        _crCtrl.text = prefs.getString('company_cr') ?? '';
-        _addressCtrl.text = prefs.getString('company_address') ?? '';
-        _cityCtrl.text = prefs.getString('company_city') ?? '';
-        _emailCtrl.text = prefs.getString('company_email') ?? '';
-      });
+      final companyData = await _supabaseService.loadCompanyDetails();
+      if (companyData != null) {
+        setState(() {
+          _owner1Ctrl.text = companyData['ownerName1'] ?? '';
+          _owner2Ctrl.text = companyData['ownerName2'] ?? '';
+          _otherCtrl.text = companyData['otherName'] ?? '';
+          _phoneCtrl.text = companyData['phone'] ?? '';
+          _vatCtrl.text = companyData['vatNo'] ?? '';
+          _crCtrl.text = companyData['crNumber'] ?? '';
+          _addressCtrl.text = companyData['address'] ?? '';
+          _cityCtrl.text = companyData['city'] ?? '';
+          _emailCtrl.text = companyData['email'] ?? '';
+        });
+      }
     } catch (e) {
       print('Error loading company details: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading company details: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   Future<void> _saveCompany() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('company_owner1', _owner1Ctrl.text);
-      await prefs.setString('company_owner2', _owner2Ctrl.text);
-      await prefs.setString('company_other', _otherCtrl.text);
-      await prefs.setString('company_phone', _phoneCtrl.text);
-      await prefs.setString('company_vat', _vatCtrl.text);
-      await prefs.setString('company_cr', _crCtrl.text);
-      await prefs.setString('company_address', _addressCtrl.text);
-      await prefs.setString('company_city', _cityCtrl.text);
-      await prefs.setString('company_email', _emailCtrl.text);
+      final companyData = {
+        'ownerName1': _owner1Ctrl.text,
+        'ownerName2': _owner2Ctrl.text,
+        'otherName': _otherCtrl.text,
+        'phone': _phoneCtrl.text,
+        'vatNo': _vatCtrl.text,
+        'crNumber': _crCtrl.text,
+        'address': _addressCtrl.text,
+        'city': _cityCtrl.text,
+        'email': _emailCtrl.text,
+      };
+
+      await _supabaseService.saveCompanyDetails(companyData);
 
       // Trigger refresh
       widget.refreshNotifier.value = !widget.refreshNotifier.value;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Company details saved successfully!'),
+          content: Text('Company details saved successfully to server!'),
           backgroundColor: Colors.green,
         ),
       );

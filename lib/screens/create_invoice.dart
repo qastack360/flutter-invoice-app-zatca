@@ -116,12 +116,26 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
   }
 
   Future<void> _loadCompanyDetails() async {
-    final db = await DatabaseHelper.instance.db;
-    final rows = await db.query('company_details', where: 'id=1');
-    if (rows.isNotEmpty) {
-      setState(() {
-        _companyDetails = CompanyDetails.fromMap(rows.first);
-      });
+    try {
+      final companyData = await _supabaseService.loadCompanyDetails();
+      if (companyData != null) {
+        setState(() {
+          _companyDetails = CompanyDetails(
+            id: 1,
+            ownerName1: companyData['ownerName1'] ?? '',
+            ownerName2: companyData['ownerName2'] ?? '',
+            otherName: companyData['otherName'] ?? '',
+            phone: companyData['phone'] ?? '',
+            vatNo: companyData['vatNo'] ?? '',
+            crNumber: companyData['crNumber'] ?? '',
+            address: companyData['address'] ?? '',
+            city: companyData['city'] ?? '',
+            email: companyData['email'] ?? '',
+          );
+        });
+      }
+    } catch (e) {
+      print('Error loading company details: $e');
     }
   }
 
