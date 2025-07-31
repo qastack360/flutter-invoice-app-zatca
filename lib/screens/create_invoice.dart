@@ -1141,10 +1141,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       final total = subtotal + vatAmount - discount;
 
       await _printerService.printInvoice(
-        invoiceNumber: '${_sendToZatca ? 'ZATCA' : 'INV_NO'}-${_sendToZatca ? _zatcaInvoiceNo : _localInvoiceNo}',
+        invoiceNumber: 'INV_NO-$_localInvoiceNo',
         invoiceData: {
-          'no': _invoiceNo,
-          'invoice_prefix': _sendToZatca ? 'ZATCA' : 'INV_NO',
+          'no': _localInvoiceNo,
+          'invoice_prefix': 'INV_NO',
           'date': _date,
           'salesman': _salesmanCtrl.text,
           'customer': _customerCtrl.text,
@@ -1153,8 +1153,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
           'vatPercent': _vatPercent,
           'discount': double.tryParse(_discountCtrl.text) ?? 0,
           'cash': double.tryParse(_cashCtrl.text) ?? 0,
-          'zatca_invoice': _sendToZatca,
-          'zatca_environment': _currentZatcaEnvironment,
+          'zatca_invoice': false,
+          'zatca_environment': null,
           'company_name': _companyDetails?.ownerName1 ?? 'Company Name',
           'company_vat': _companyDetails?.vatNo ?? '',
           'company_cr': _companyDetails?.crNumber ?? '',
@@ -1164,8 +1164,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
           'company_email': _companyDetails?.email ?? '',
         },
         qrData: QRService.generatePrintQRData({
-          'no': _invoiceNo,
-          'invoice_prefix': _sendToZatca ? 'ZATCA' : 'INV_NO',
+          'no': _localInvoiceNo,
+          'invoice_prefix': 'INV_NO',
           'date': _date,
           'salesman': _salesmanCtrl.text,
           'customer': _customerCtrl.text,
@@ -1174,8 +1174,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
           'vatPercent': _vatPercent,
           'discount': double.tryParse(_discountCtrl.text) ?? 0,
           'cash': double.tryParse(_cashCtrl.text) ?? 0,
-          'zatca_invoice': _sendToZatca,
-          'zatca_environment': _currentZatcaEnvironment,
+          'zatca_invoice': false,
+          'zatca_environment': null,
           'company_name': _companyDetails?.ownerName1 ?? 'Company Name',
           'company_vat': _companyDetails?.vatNo ?? '',
           'company_cr': _companyDetails?.crNumber ?? '',
@@ -1195,6 +1195,49 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
         companyDetails: _companyDetails?.toMap() ?? {},
       );
     }
+    
+    // Save to history
+    await _saveLocalInvoiceToHistory();
+  }
+
+  // Save local invoice to history
+  Future<void> _saveLocalInvoiceToHistory() async {
+    // Calculate totals
+    final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
+    final discount = double.tryParse(_discountCtrl.text) ?? 0;
+    final vatAmount = _items.fold<double>(0, (sum, it) => sum + (it.quantity * it.rate * _vatPercent / 100));
+    final total = subtotal + vatAmount - discount;
+    
+    final record = {
+      'no': _localInvoiceNo,
+      'invoice_prefix': 'INV_NO',
+      'date': _date,
+      'salesman': _salesmanCtrl.text,
+      'customer': _customerCtrl.text,
+      'vatNo': _customerVatCtrl.text,
+      'items': _items.map((it) => it.toMap()).toList(),
+      'vatPercent': _vatPercent,
+      'discount': discount,
+      'cash': double.tryParse(_cashCtrl.text) ?? 0,
+      'total': total,
+      'vatAmount': vatAmount,
+      'subtotal': subtotal,
+      'zatca_invoice': false,
+      'zatca_environment': null,
+      'sync_status': 'local',
+      'created_at': DateTime.now().toIso8601String(),
+      'synced_at': null,
+      // Company details
+      'company': _companyDetails?.toMap() ?? {},
+    };
+    
+    _history.add(record);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('invoices', _history.map((e) => jsonEncode(e)).toList());
+    
+    // Increment local invoice counter
+    _localInvoiceNo++;
+    await prefs.setInt('localStartInvoice', _localInvoiceNo);
   }
 
   // Save invoice with ZATCA data

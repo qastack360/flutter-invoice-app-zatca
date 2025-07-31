@@ -321,6 +321,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     final hasZatcaUUID = invoice['zatca_uuid'] != null;
     
     return Card(
+      color: Colors.white,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -328,7 +329,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
           children: [
             Text(
               'QR Code / رمز QR',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
             ),
             SizedBox(height: 12),
             
@@ -337,26 +338,26 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
               Container(
                 padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  border: Border.all(color: Colors.orange[200]!),
+                  color: Colors.white,
+                  border: Border.all(color: Colors.black, width: 1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.qr_code, color: Colors.orange[700], size: 48),
+                    Icon(Icons.qr_code, color: Colors.black, size: 48),
                     SizedBox(height: 8),
                     Text(
                       'ZATCA Invoice',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.orange[800],
+                        color: Colors.black,
                       ),
                     ),
                     SizedBox(height: 8),
                     Text(
                       'QR code will be generated after ZATCA verification',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.orange[700]),
+                      style: TextStyle(color: Colors.black),
                     ),
                     SizedBox(height: 8),
                     Text(
@@ -364,7 +365,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.orange[600],
+                        color: Colors.black,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -377,14 +378,15 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
                 child: Container(
                   padding: EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
+                    color: Colors.white,
+                    border: Border.all(color: Colors.black, width: 1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: FutureBuilder<Uint8List?>(
                     future: QRService.generateQRImage(QRService.generateZatcaQRData(invoice)),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return CircularProgressIndicator();
+                        return CircularProgressIndicator(color: Colors.black);
                       } else if (snapshot.hasData && snapshot.data != null) {
                         return Image.memory(
                           snapshot.data!,
@@ -397,14 +399,15 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
                           width: 200,
                           height: 200,
                           decoration: BoxDecoration(
-                            color: Colors.grey[200],
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.black, width: 1),
                           ),
                           child: Center(
                             child: Text(
                               'QR Code\nNot Available',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey[600]),
+                              style: TextStyle(color: Colors.black),
                             ),
                           ),
                         );
@@ -418,7 +421,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
                 isZatcaInvoice 
                   ? 'Scan this QR code to verify invoice with ZATCA'
                   : 'Scan this QR code to verify invoice details',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: Colors.black),
                 textAlign: TextAlign.center,
               ),
             ],

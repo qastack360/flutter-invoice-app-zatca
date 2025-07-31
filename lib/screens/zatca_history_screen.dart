@@ -1,15 +1,18 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:pdfx/pdfx.dart' as pdfx;
 import '../models/item_data.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_service.dart';
 import '../utils/export_helper.dart';
 import '../utils/monthly_report_helper.dart';
-import 'invoice_preview_screen.dart';
-import '../services/bluetooth_printer_service.dart';
+import '../utils/invoice_helper.dart';
 import '../services/qr_service.dart';
+import '../services/bluetooth_printer_service.dart';
+import 'invoice_preview_screen.dart';
 
 class ZatcaHistoryScreen extends StatefulWidget {
   final ValueNotifier<bool> refreshNotifier;
@@ -380,29 +383,57 @@ class _ZatcaHistoryScreenState extends State<ZatcaHistoryScreen> {
 
   Future<void> _printInvoice(Map<String, dynamic> invoice) async {
     try {
-      // Check if printer is connected
-      final isConnected = await _checkPrinterConnection();
+      // Check mock printing setting
+      final prefs = await SharedPreferences.getInstance();
+      final mockPrinting = prefs.getBool('mockPrinting') ?? false;
       
-      if (!isConnected) {
+      if (mockPrinting) {
+        // Show preview for mock printing
+        final imageData = await _generateInvoiceImage(invoice);
+        if (imageData != null) {
+          await showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              insetPadding: const EdgeInsets.all(10),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
+                child: SingleChildScrollView(
+                  child: Container(
+                    color: Colors.white,
+                    child: Image.memory(imageData),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      } else {
+        // Check if printer is connected for real printing
+        final isConnected = await _checkPrinterConnection();
+        
+        if (!isConnected) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Printer not connected. Please connect a printer first.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        // Generate invoice content for printing
+        final invoiceContent = _generateInvoiceContent(invoice);
+        
+        // TODO: Implement actual printing logic
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Printer not connected. Please connect a printer first.'),
-            backgroundColor: Colors.orange,
+            content: Text('Invoice printed successfully!'),
+            backgroundColor: Colors.green,
           ),
         );
-        return;
       }
-
-      // Generate invoice content for printing
-      final invoiceContent = _generateInvoiceContent(invoice);
-      
-      // TODO: Implement actual printing logic
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invoice printed successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
       
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -411,6 +442,48 @@ class _ZatcaHistoryScreenState extends State<ZatcaHistoryScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  // Generate invoice image for preview
+  Future<Uint8List?> _generateInvoiceImage(Map<String, dynamic> invoice) async {
+    try {
+      // Generate PDF with invoice data
+      final Uint8List pdfBytes = await InvoiceHelper.generatePdf(
+        invoiceNumber: '${invoice['invoice_prefix'] ?? 'ZATCA'}-${invoice['no']}',
+        invoiceData: invoice,
+        qrData: QRService.generateSimplifiedZatcaQRData(invoice),
+        customerName: invoice['customer'] ?? '',
+        date: invoice['date'] ?? '',
+        items: (invoice['items'] as List<dynamic>).map((item) => item as Map<String, dynamic>).toList(),
+        total: (invoice['total'] ?? 0.0).toDouble(),
+        vatAmount: (invoice['vatAmount'] ?? 0.0).toDouble(),
+        subtotal: (invoice['subtotal'] ?? 0.0).toDouble(),
+        discount: (invoice['discount'] ?? 0.0).toDouble(),
+        vatPercent: (invoice['vatPercent'] ?? 15.0).toString(),
+        companyDetails: (invoice['company'] as Map<String, dynamic>?) ?? {},
+        salesman: invoice['salesman'] ?? '',
+        cash: invoice['cash']?.toString() ?? '',
+        customer: invoice['customer'] ?? '',
+        vatNo: invoice['vatNo'] ?? '',
+      );
+
+      // Open and render using pdfx
+      final doc = await pdfx.PdfDocument.openData(pdfBytes);
+      final page = await doc.getPage(1);
+      final pageImage = await page.render(
+        width: (page.width * 3).toDouble(),
+        height: (page.height * 3).toDouble(),
+      );
+
+      final imageData = pageImage?.bytes;
+      await page.close();
+      await doc.close();
+
+      return imageData;
+    } catch (e) {
+      print('Error generating invoice image: $e');
+      return null;
     }
   }
 
