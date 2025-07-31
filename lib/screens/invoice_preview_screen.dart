@@ -159,7 +159,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
                   style: TextStyle(fontSize: 10, color: Colors.black),
                 ),
                 Text(
-                  'Status: ${(invoice['zatca_response']?['compliance_status'] ?? 'approved').toString()}',
+                  'Status: ${_getZatcaStatus(invoice)}',
                   style: TextStyle(fontSize: 10, color: Colors.black),
                 ),
                 SizedBox(height: 16),
@@ -981,5 +981,17 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
         ],
       ),
     );
+  }
+
+  String _getZatcaStatus(Map<String, dynamic> invoice) {
+    final response = invoice['zatca_response'];
+    if (response == null) {
+      return 'Not verified';
+    }
+    final complianceStatus = response['compliance_status'];
+    if (complianceStatus == null) {
+      return 'Unknown status';
+    }
+    return complianceStatus.toString();
   }
 } 

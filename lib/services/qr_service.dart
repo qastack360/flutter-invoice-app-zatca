@@ -93,19 +93,37 @@ class QRService {
 
   // Generate simplified QR code data for ZATCA app (fast scanning)
   static Map<String, dynamic> generateSimplifiedZatcaQRData(Map<String, dynamic> invoiceData) {
-    // Calculate total from items if not provided
+    // Calculate totals from items if not provided
+    final items = invoiceData['items'] ?? [];
     double total = 0.0;
-    if (invoiceData['total'] != null) {
-      total = (invoiceData['total'] as num).toDouble();
-    } else if (invoiceData['items'] != null) {
-      final items = invoiceData['items'] as List<dynamic>;
-      for (var item in items) {
-        double quantity = (item['quantity'] ?? 0).toDouble();
-        double rate = (item['rate'] ?? 0).toDouble();
-        double vatPercent = (invoiceData['vatPercent'] ?? 15.0).toDouble();
-        double itemTotal = quantity * rate;
-        double itemVat = itemTotal * (vatPercent / 100);
-        total += itemTotal + itemVat;
+    
+    for (var item in items) {
+      double quantity = (item['quantity'] ?? 0).toDouble();
+      double rate = (item['rate'] ?? 0).toDouble();
+      double vatPercent = (item['vatPercent'] ?? 15.0).toDouble();
+      double discount = (item['discount'] ?? 0).toDouble();
+      
+      double itemTotal = quantity * rate;
+      double itemVat = itemTotal * (vatPercent / 100);
+      double itemFinal = itemTotal + itemVat - discount;
+      
+      total += itemFinal;
+    }
+    
+    // Use provided total if available
+    total = (invoiceData['total'] ?? invoiceData['finalAmount'] ?? total).toDouble();
+    
+    // Parse ZATCA response if it's a JSON string
+    Map<String, dynamic> zatcaResponse = {};
+    if (invoiceData['zatca_response'] != null) {
+      if (invoiceData['zatca_response'] is String) {
+        try {
+          zatcaResponse = jsonDecode(invoiceData['zatca_response']);
+        } catch (e) {
+          print('Error parsing ZATCA response: $e');
+        }
+      } else if (invoiceData['zatca_response'] is Map) {
+        zatcaResponse = Map<String, dynamic>.from(invoiceData['zatca_response']);
       }
     }
     
@@ -115,7 +133,7 @@ class QRService {
       'invoice_number': '${invoiceData['invoice_prefix'] ?? 'INV'}-${invoiceData['no']}',
       'total': total.toStringAsFixed(2),
       'date': invoiceData['date'] ?? DateTime.now().toString().substring(0, 10),
-      'status': (invoiceData['zatca_response']?['compliance_status'] ?? 'verified').toString(),
+      'status': (zatcaResponse['compliance_status'] ?? 'verified').toString(),
       'type': 'ZATCA',
     };
   }
@@ -150,6 +168,20 @@ class QRService {
     total = (invoiceData['total'] ?? invoiceData['finalAmount'] ?? total).toDouble();
     vatAmount = (invoiceData['vatAmount'] ?? vatAmount).toDouble();
     
+    // Parse ZATCA response if it's a JSON string
+    Map<String, dynamic> zatcaResponse = {};
+    if (invoiceData['zatca_response'] != null) {
+      if (invoiceData['zatca_response'] is String) {
+        try {
+          zatcaResponse = jsonDecode(invoiceData['zatca_response']);
+        } catch (e) {
+          print('Error parsing ZATCA response: $e');
+        }
+      } else if (invoiceData['zatca_response'] is Map) {
+        zatcaResponse = Map<String, dynamic>.from(invoiceData['zatca_response']);
+      }
+    }
+    
     return {
       'invoice_number': '${invoiceData['invoice_prefix'] ?? 'INV'}-${invoiceData['no']}',
       'date': invoiceData['date'] ?? DateTime.now().toString(),
@@ -180,9 +212,9 @@ class QRService {
       'qr_scan_message': invoiceData['zatca_uuid'] != null 
           ? 'Scan with ZATCA app to verify this invoice'
           : 'Local invoice - not verified by ZATCA',
-      'compliance_status': (invoiceData['zatca_response']?['compliance_status'] ?? '').toString(),
-      'reporting_status': (invoiceData['zatca_response']?['reporting_status'] ?? '').toString(),
-      'clearance_status': (invoiceData['zatca_response']?['clearance_status'] ?? '').toString(),
+      'compliance_status': (zatcaResponse['compliance_status'] ?? '').toString(),
+      'reporting_status': (zatcaResponse['reporting_status'] ?? '').toString(),
+      'clearance_status': (zatcaResponse['clearance_status'] ?? '').toString(),
       'timestamp': DateTime.now().toIso8601String(),
       'version': '1.0',
       'format': 'ZATCA_COMPLIANT'
@@ -237,6 +269,20 @@ class QRService {
     total = (invoiceData['total'] ?? invoiceData['finalAmount'] ?? total).toDouble();
     vatAmount = (invoiceData['vatAmount'] ?? vatAmount).toDouble();
     
+    // Parse ZATCA response if it's a JSON string
+    Map<String, dynamic> zatcaResponse = {};
+    if (invoiceData['zatca_response'] != null) {
+      if (invoiceData['zatca_response'] is String) {
+        try {
+          zatcaResponse = jsonDecode(invoiceData['zatca_response']);
+        } catch (e) {
+          print('Error parsing ZATCA response: $e');
+        }
+      } else if (invoiceData['zatca_response'] is Map) {
+        zatcaResponse = Map<String, dynamic>.from(invoiceData['zatca_response']);
+      }
+    }
+    
     // ZATCA mobile app optimized format
     return {
       // Core invoice data
@@ -268,9 +314,9 @@ class QRService {
       'zatca': {
         'uuid': invoiceData['zatca_uuid'] ?? '',
         'verified': invoiceData['zatca_verified'] ?? false,
-        'compliance_status': (invoiceData['zatca_response']?['compliance_status'] ?? '').toString(),
-        'reporting_status': (invoiceData['zatca_response']?['reporting_status'] ?? '').toString(),
-        'clearance_status': (invoiceData['zatca_response']?['clearance_status'] ?? '').toString(),
+        'compliance_status': (zatcaResponse['compliance_status'] ?? '').toString(),
+        'reporting_status': (zatcaResponse['reporting_status'] ?? '').toString(),
+        'clearance_status': (zatcaResponse['clearance_status'] ?? '').toString(),
         'environment': invoiceData['zatca_environment'] ?? 'local',
         'verification_url': invoiceData['zatca_uuid'] != null 
             ? 'https://zatca.gov.sa/verify/${invoiceData['zatca_uuid']}'

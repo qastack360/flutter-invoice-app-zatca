@@ -156,45 +156,43 @@ class InvoiceHelper {
                   if ((vatNo ?? '').isNotEmpty) ['VAT No / رقم ضريبي', vatNo ?? ''],
                 ], buildText),
                 
-                // ZATCA Verification Status (if ZATCA invoice)
+                // ZATCA Verification Status in Header (only for ZATCA invoices)
                 if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
-                  pw.SizedBox(height: 3),
+                  pw.SizedBox(height: 5),
                   pw.Container(
-                    width: double.infinity,
-                    padding: pw.EdgeInsets.all(4),
+                    padding: pw.EdgeInsets.all(8),
                     decoration: pw.BoxDecoration(
-                      color: PdfColors.white,
-                      border: pw.Border.all(color: PdfColors.black, width: 1),
+                      color: PdfColors.green,
+                      borderRadius: pw.BorderRadius.circular(4),
                     ),
                     child: pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.center,
                       children: [
-                        buildText('✅ ', size: 12, bold: true),
-                        buildText('ZATCA Verified / تم التحقق من ضريبة القيمة المضافة', size: 12, bold: true),
+                        pw.Text('✅ ', style: pw.TextStyle(fontSize: 12, color: PdfColors.white)),
+                        buildText('ZATCA Verified Invoice', size: 12, bold: true),
                       ],
                     ),
                   ),
+                  pw.SizedBox(height: 5),
                 ],
-                
-                pw.SizedBox(height: 5),
 
                 // ZATCA Details Section (only for ZATCA invoices)
                 if (invoiceData['zatca_invoice'] == true && invoiceData['zatca_uuid'] != null) ...[
                   pw.Container(
-                    width: double.infinity,
                     padding: pw.EdgeInsets.all(8),
                     decoration: pw.BoxDecoration(
-                      color: PdfColors.white,
+                      color: PdfColors.grey100,
                       border: pw.Border.all(color: PdfColors.black, width: 1),
                     ),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
+                        buildText('ZATCA Details:', size: 12, bold: true),
+                        pw.SizedBox(height: 3),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
                             buildText('UUID:', size: 10, bold: true),
-                            buildText(invoiceData['zatca_uuid'] ?? 'N/A', size: 10),
+                            buildText(invoiceData['zatca_uuid'] ?? '', size: 10),
                           ],
                         ),
                         pw.SizedBox(height: 3),
@@ -202,7 +200,7 @@ class InvoiceHelper {
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
                             buildText('Status:', size: 10, bold: true),
-                            buildText((invoiceData['zatca_response']?['compliance_status'] ?? 'approved').toString(), size: 10),
+                            buildText(_getZatcaStatus(invoiceData), size: 10),
                           ],
                         ),
                       ],
@@ -422,5 +420,17 @@ class InvoiceHelper {
         child: buildText(value, size: 12.6, align: pw.TextAlign.right),
       ),
     ]);
+  }
+
+  static String _getZatcaStatus(Map<String, dynamic> invoiceData) {
+    final response = invoiceData['zatca_response'];
+    if (response == null) {
+      return 'N/A';
+    }
+    final complianceStatus = response['compliance_status'];
+    if (complianceStatus == null) {
+      return 'N/A';
+    }
+    return complianceStatus.toString();
   }
 }
