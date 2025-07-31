@@ -1018,7 +1018,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
                                 ),
                                 SizedBox(height: 8),
                                 Text('UUID: ${zatcaResponse['uuid'] ?? 'N/A'}', style: TextStyle(color: Colors.black)),
-                                Text('Status: ${zatcaResponse['compliance_status'] ?? 'N/A'}', style: TextStyle(color: Colors.black)),
+                                Text('Status: ${(zatcaResponse['compliance_status'] ?? 'N/A').toString()}', style: TextStyle(color: Colors.black)),
                                 Text('Environment: ${updatedInvoiceData['zatca_environment'] ?? 'live'}', style: TextStyle(color: Colors.black)),
                                 SizedBox(height: 8),
                                 Text(

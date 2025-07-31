@@ -48,7 +48,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Invoice Preview / معاينة الفاتورة'),
+        title: Text('Thermal Print Preview / معاينة الطباعة الحرارية'),
         backgroundColor: Colors.blue,
         actions: [
           IconButton(
@@ -63,72 +63,290 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Invoice Header
-            _buildInvoiceHeader(invoice),
-            SizedBox(height: 20),
+        child: Container(
+          // Thermal printer style - white background, black text
+          color: Colors.white,
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Company Header (centered, bold)
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      invoice['company']?['ownerName1'] ?? 'Company Name',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (invoice['company']?['ownerName2'] != null)
+                      Text(
+                        invoice['company']['ownerName2'],
+                        style: TextStyle(fontSize: 14, color: Colors.black),
+                        textAlign: TextAlign.center,
+                      ),
+                    if (invoice['company']?['phone'] != null)
+                      Text(
+                        'Phone: ${invoice['company']['phone']}',
+                        style: TextStyle(fontSize: 12, color: Colors.black),
+                        textAlign: TextAlign.center,
+                      ),
+                    if (invoice['company']?['vatNo'] != null)
+                      Text(
+                        'VAT: ${invoice['company']['vatNo']}',
+                        style: TextStyle(fontSize: 12, color: Colors.black),
+                        textAlign: TextAlign.center,
+                      ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
 
-            // Customer Details
-            _buildCustomerDetails(invoice),
-            SizedBox(height: 20),
+              // Invoice Number and Date
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Invoice #: ${invoice['invoice_prefix'] ?? 'INV'}-${invoice['no']}',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
+                  ),
+                  Text(
+                    'Date: ${invoice['date']}',
+                    style: TextStyle(fontSize: 12, color: Colors.black),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
 
-            // Items Table
-            _buildItemsTable(items, invoice),
-            SizedBox(height: 20),
+              // Salesman and Customer
+              Text(
+                'Salesman: ${invoice['salesman']}',
+                style: TextStyle(fontSize: 12, color: Colors.black),
+              ),
+              Text(
+                'Customer: ${invoice['customer']}',
+                style: TextStyle(fontSize: 12, color: Colors.black),
+              ),
+              if (invoice['customerVat'] != null && invoice['customerVat'].isNotEmpty)
+                Text(
+                  'Customer VAT: ${invoice['customerVat']}',
+                  style: TextStyle(fontSize: 12, color: Colors.black),
+                ),
+              SizedBox(height: 16),
 
-            // Totals
-            _buildTotals(totalAmount, vatAmount, discount, cash, finalAmount, invoice),
-            SizedBox(height: 20),
+              // ZATCA Verification Status (if ZATCA invoice)
+              if (invoice['zatca_invoice'] == true && invoice['zatca_uuid'] != null) ...[
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'ZATCA Verified Invoice',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'UUID: ${invoice['zatca_uuid']}',
+                  style: TextStyle(fontSize: 10, color: Colors.black),
+                ),
+                Text(
+                  'Status: ${(invoice['zatca_response']?['compliance_status'] ?? 'approved').toString()}',
+                  style: TextStyle(fontSize: 10, color: Colors.black),
+                ),
+                SizedBox(height: 16),
+              ],
 
-            // ZATCA Information
-            if (invoice['zatca_invoice'] == true) _buildZatcaInfo(invoice),
-            
-            // QR Code for all invoices
-            _buildQRCodeSection(invoice),
-            
-            // Print Status
-            if (_isPrinting) _buildPrintingStatus(),
-          ],
+              // Items Table Header
+              Row(
+                children: [
+                  Expanded(flex: 1, child: Text('Sr', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black))),
+                  Expanded(flex: 3, child: Text('Description', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black))),
+                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black))),
+                  Expanded(flex: 1, child: Text('Rate', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black))),
+                  Expanded(flex: 1, child: Text('VAT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black))),
+                  Expanded(flex: 1, child: Text('Total', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black))),
+                ],
+              ),
+              Divider(color: Colors.black, height: 1),
+
+              // Items
+              ...items.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final itemTotal = item.quantity * item.rate;
+                final itemVat = itemTotal * (invoice['vatPercent'] ?? 15) / 100;
+                final itemTotalWithVat = itemTotal + itemVat;
+                
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(flex: 1, child: Text('${index + 1}', style: TextStyle(fontSize: 10, color: Colors.black))),
+                      Expanded(flex: 3, child: Text(item.description, style: TextStyle(fontSize: 10, color: Colors.black))),
+                      Expanded(flex: 1, child: Text(item.quantity.toString(), style: TextStyle(fontSize: 10, color: Colors.black))),
+                      Expanded(flex: 1, child: Text('SAR ${item.rate.toStringAsFixed(2)}', style: TextStyle(fontSize: 10, color: Colors.black))),
+                      Expanded(flex: 1, child: Text('SAR ${itemVat.toStringAsFixed(2)}', style: TextStyle(fontSize: 10, color: Colors.black))),
+                      Expanded(flex: 1, child: Text('SAR ${itemTotalWithVat.toStringAsFixed(2)}', style: TextStyle(fontSize: 10, color: Colors.black))),
+                    ],
+                  ),
+                );
+              }).toList(),
+              Divider(color: Colors.black, height: 1),
+              SizedBox(height: 16),
+
+              // Totals
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Subtotal:', style: TextStyle(fontSize: 12, color: Colors.black)),
+                  Text('SAR ${totalAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: Colors.black)),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('VAT (${invoice['vatPercent'] ?? 15}%):', style: TextStyle(fontSize: 12, color: Colors.black)),
+                  Text('SAR ${vatAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: Colors.black)),
+                ],
+              ),
+              if (discount > 0)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Discount:', style: TextStyle(fontSize: 12, color: Colors.black)),
+                    Text('SAR ${discount.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: Colors.black)),
+                  ],
+                ),
+              Divider(color: Colors.black, height: 1),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Total:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('SAR ${finalAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                ],
+              ),
+              if (cash > 0) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Cash:', style: TextStyle(fontSize: 12, color: Colors.black)),
+                    Text('SAR ${cash.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: Colors.black)),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Change:', style: TextStyle(fontSize: 12, color: Colors.black)),
+                    Text('SAR ${(cash - finalAmount).toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: Colors.black)),
+                  ],
+                ),
+              ],
+              SizedBox(height: 16),
+
+              // QR Code
+              Center(
+                child: Column(
+                  children: [
+                    Container(
+                      width: 150,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black, width: 1),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'QR Code\n(150x150)',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: Colors.black),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      invoice['zatca_invoice'] == true 
+                          ? 'Scan with ZATCA app to verify'
+                          : 'Scan to view invoice details',
+                      style: TextStyle(fontSize: 10, color: Colors.black),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
+
+              // Footer
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'Total Items: ${items.length}',
+                      style: TextStyle(fontSize: 12, color: Colors.black),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Thank you for shopping with us',
+                      style: TextStyle(fontSize: 12, color: Colors.black),
+                      textAlign: TextAlign.center,
+                    ),
+                    Text(
+                      'شكرا لتسوقك معنا!',
+                      style: TextStyle(fontSize: 12, color: Colors.black),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildInvoiceHeader(Map<String, dynamic> invoice) {
+  Widget _buildThermalCompanyHeader(Map<String, dynamic> invoice) {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'INVOICE / فاتورة',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: invoice['zatca_invoice'] == true ? Colors.green : Colors.orange,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    invoice['zatca_invoice'] == true ? 'ZATCA' : 'Local',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              'Company Name / اسم الشركة',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text('Address: ${invoice['company']['address']}'),
+            Text('Phone: ${invoice['company']['phone']}'),
+            Text('Email: ${invoice['company']['email']}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThermalInvoiceHeader(Map<String, dynamic> invoice) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'INVOICE / فاتورة',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
             ),
             SizedBox(height: 8),
             Text(
@@ -149,7 +367,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     );
   }
 
-  Widget _buildCustomerDetails(Map<String, dynamic> invoice) {
+  Widget _buildThermalCustomerDetails(Map<String, dynamic> invoice) {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(16),
@@ -170,7 +388,28 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     );
   }
 
-  Widget _buildItemsTable(List<ItemData> items, Map<String, dynamic> invoice) {
+  Widget _buildThermalZatcaStatus(Map<String, dynamic> invoice) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ZATCA Verification Status / حالة تأكيد ضريبة القيمة المضافة',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 12),
+            Text('ZATCA UUID: ${invoice['zatca_uuid']}'),
+            Text('Environment: ${invoice['zatca_environment']}'),
+            Text('Sync Status: ${invoice['sync_status']}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThermalItemsTable(List<ItemData> items, Map<String, dynamic> invoice) {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(16),
@@ -229,7 +468,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     );
   }
 
-  Widget _buildTotals(double totalAmount, double vatAmount, double discount, double cash, double finalAmount, Map<String, dynamic> invoice) {
+  Widget _buildThermalTotals(double totalAmount, double vatAmount, double discount, double cash, double finalAmount, Map<String, dynamic> invoice) {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(16),
@@ -294,31 +533,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     );
   }
 
-  Widget _buildZatcaInfo(Map<String, dynamic> invoice) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'ZATCA Information / معلومات ضريبة القيمة المضافة',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 12),
-            if (invoice['zatca_uuid'] != null)
-              Text('ZATCA UUID: ${invoice['zatca_uuid']}'),
-            if (invoice['zatca_environment'] != null)
-              Text('Environment: ${invoice['zatca_environment']}'),
-            if (invoice['sync_status'] != null)
-              Text('Sync Status: ${invoice['sync_status']}'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQRCodeSection(Map<String, dynamic> invoice) {
+  Widget _buildThermalQRCode(Map<String, dynamic> invoice) {
     final isZatcaInvoice = invoice['zatca_invoice'] == true;
     final hasZatcaUUID = invoice['zatca_uuid'] != null;
     
@@ -433,16 +648,43 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     );
   }
 
-  Widget _buildPrintingStatus() {
+  Widget _buildThermalZatcaMessage(Map<String, dynamic> invoice) {
     return Card(
-      color: Colors.blue[50],
       child: Padding(
         padding: EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text('Printing invoice...'),
+            Text(
+              'ZATCA Verification Message / رسالة تأكيد ضريبة القيمة المضافة',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'This invoice has been verified with ZATCA. The QR code is ready for scanning.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.green),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThermalFooter(int itemCount) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Footer / التذيل',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 12),
+            Text('Thank you for your business!'),
+            Text('Please visit again.'),
           ],
         ),
       ),

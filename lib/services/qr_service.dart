@@ -115,7 +115,7 @@ class QRService {
       'invoice_number': '${invoiceData['invoice_prefix'] ?? 'INV'}-${invoiceData['no']}',
       'total': total.toStringAsFixed(2),
       'date': invoiceData['date'] ?? DateTime.now().toString().substring(0, 10),
-      'status': invoiceData['zatca_response']?['compliance_status'] ?? 'verified',
+      'status': (invoiceData['zatca_response']?['compliance_status'] ?? 'verified').toString(),
       'type': 'ZATCA',
     };
   }
@@ -180,9 +180,9 @@ class QRService {
       'qr_scan_message': invoiceData['zatca_uuid'] != null 
           ? 'Scan with ZATCA app to verify this invoice'
           : 'Local invoice - not verified by ZATCA',
-      'compliance_status': invoiceData['zatca_response']?['compliance_status'] ?? '',
-      'reporting_status': invoiceData['zatca_response']?['reporting_status'] ?? '',
-      'clearance_status': invoiceData['zatca_response']?['clearance_status'] ?? '',
+      'compliance_status': (invoiceData['zatca_response']?['compliance_status'] ?? '').toString(),
+      'reporting_status': (invoiceData['zatca_response']?['reporting_status'] ?? '').toString(),
+      'clearance_status': (invoiceData['zatca_response']?['clearance_status'] ?? '').toString(),
       'timestamp': DateTime.now().toIso8601String(),
       'version': '1.0',
       'format': 'ZATCA_COMPLIANT'
@@ -268,9 +268,9 @@ class QRService {
       'zatca': {
         'uuid': invoiceData['zatca_uuid'] ?? '',
         'verified': invoiceData['zatca_verified'] ?? false,
-        'compliance_status': invoiceData['zatca_response']?['compliance_status'] ?? '',
-        'reporting_status': invoiceData['zatca_response']?['reporting_status'] ?? '',
-        'clearance_status': invoiceData['zatca_response']?['clearance_status'] ?? '',
+        'compliance_status': (invoiceData['zatca_response']?['compliance_status'] ?? '').toString(),
+        'reporting_status': (invoiceData['zatca_response']?['reporting_status'] ?? '').toString(),
+        'clearance_status': (invoiceData['zatca_response']?['clearance_status'] ?? '').toString(),
         'environment': invoiceData['zatca_environment'] ?? 'local',
         'verification_url': invoiceData['zatca_uuid'] != null 
             ? 'https://zatca.gov.sa/verify/${invoiceData['zatca_uuid']}'
