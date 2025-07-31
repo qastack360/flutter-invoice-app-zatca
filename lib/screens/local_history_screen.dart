@@ -268,11 +268,69 @@ class _LocalHistoryScreenState extends State<LocalHistoryScreen> {
                 _showInvoiceDetails(invoice);
               },
             ),
+            IconButton(
+              icon: Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _deleteInvoice(invoice),
+            ),
           ],
         ),
         onTap: () => _showInvoicePreview(invoice),
       ),
     );
+  }
+
+  Future<void> _deleteInvoice(Map<String, dynamic> invoice) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Invoice'),
+        content: Text('Are you sure you want to delete this local invoice? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Remove from local list
+      setState(() {
+        _localInvoices.removeWhere((inv) => inv['no'] == invoice['no'] && inv['date'] == invoice['date']);
+        _filteredInvoices.removeWhere((inv) => inv['no'] == invoice['no'] && inv['date'] == invoice['date']);
+      });
+
+      // Remove from local storage
+      final prefs = await SharedPreferences.getInstance();
+      final data = prefs.getStringList('invoices') ?? [];
+      final updatedData = data.where((s) {
+        final inv = jsonDecode(s) as Map<String, dynamic>;
+        return !(inv['no'] == invoice['no'] && inv['date'] == invoice['date']);
+      }).toList();
+      await prefs.setStringList('invoices', updatedData);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Invoice deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting invoice: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showInvoiceDetails(Map<String, dynamic> invoice) {

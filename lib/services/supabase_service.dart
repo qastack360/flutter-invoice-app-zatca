@@ -195,6 +195,72 @@ class SupabaseService {
     }
   }
 
+  // Load all invoices from Supabase
+  Future<List<Map<String, dynamic>>> loadInvoices() async {
+    try {
+      final response = await _supabase
+          .from('invoices')
+          .select()
+          .eq('user_id', _supabase.auth.currentUser?.id ?? 'default')
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error loading invoices: $e');
+      return [];
+    }
+  }
+
+  // Save ZATCA invoice to Supabase
+  Future<Map<String, dynamic>> saveZatcaInvoice(Map<String, dynamic> invoiceData) async {
+    try {
+      final response = await _supabase
+          .from('invoices')
+          .insert({
+            'user_id': _supabase.auth.currentUser?.id ?? 'default',
+            'invoice_number': invoiceData['no'],
+            'invoice_prefix': invoiceData['invoice_prefix'],
+            'invoice_date': invoiceData['date'],
+            'customer_name': invoiceData['customer'],
+            'salesman': invoiceData['salesman'],
+            'vat_number': invoiceData['vatNo'],
+            'total_amount': invoiceData['total'],
+            'vat_amount': invoiceData['vatAmount'],
+            'subtotal': invoiceData['subtotal'],
+            'discount': invoiceData['discount'],
+            'cash': invoiceData['cash'],
+            'items': jsonEncode(invoiceData['items']),
+            'company_details': jsonEncode(invoiceData['company']),
+            'zatca_invoice': true,
+            'zatca_uuid': invoiceData['zatca_uuid'],
+            'zatca_environment': invoiceData['zatca_environment'],
+            'zatca_response': jsonEncode(invoiceData['zatca_response']),
+            'sync_status': 'completed',
+            'created_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .select()
+          .single();
+
+      return response;
+    } catch (e) {
+      throw Exception('Failed to save ZATCA invoice: $e');
+    }
+  }
+
+  // Delete invoice from Supabase
+  Future<void> deleteInvoice(String invoiceId) async {
+    try {
+      await _supabase
+          .from('invoices')
+          .delete()
+          .eq('id', invoiceId)
+          .eq('user_id', _supabase.auth.currentUser?.id ?? 'default');
+    } catch (e) {
+      throw Exception('Failed to delete invoice: $e');
+    }
+  }
+
   // Get all invoices from Supabase
   Future<List<Map<String, dynamic>>> getAllInvoices() async {
     try {

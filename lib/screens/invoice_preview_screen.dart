@@ -646,7 +646,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
           subtotal: totalAmount,
           discount: discount,
           vatPercent: (invoice['vatPercent'] ?? 15.0).toString(),
-          companyDetails: {}, // TODO: Load company details
+          companyDetails: (invoice['company'] as Map<String, dynamic>?) ?? {},
         );
         
         ScaffoldMessenger.of(context).showSnackBar(

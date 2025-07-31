@@ -56,23 +56,37 @@ class _ZatcaHistoryScreenState extends State<ZatcaHistoryScreen> {
         _isLoading = true;
       });
 
-      // Load invoices from local storage
-      final prefs = await SharedPreferences.getInstance();
-      final data = prefs.getStringList('invoices') ?? [];
-      
-      List<Map<String, dynamic>> allInvoices = data
-          .map((s) => jsonDecode(s) as Map<String, dynamic>)
-          .toList();
+      // Load ZATCA invoices from Supabase server
+      List<Map<String, dynamic>> serverInvoices = [];
+      try {
+        serverInvoices = await _supabaseService.loadInvoices();
+        // Filter for ZATCA invoices only
+        serverInvoices = serverInvoices.where((invoice) {
+          final isZatca = invoice['zatca_invoice'] == true;
+          final environment = invoice['zatca_environment'] ?? 'live';
+          return isZatca && environment == _selectedEnvironment;
+        }).toList();
+      } catch (e) {
+        print('Error loading from server: $e');
+        // Fallback to local storage if server fails
+        final prefs = await SharedPreferences.getInstance();
+        final data = prefs.getStringList('invoices') ?? [];
+        
+        List<Map<String, dynamic>> allInvoices = data
+            .map((s) => jsonDecode(s) as Map<String, dynamic>)
+            .toList();
 
-      // Filter ZATCA invoices
-      _zatcaInvoices = allInvoices.where((invoice) {
-        final isZatca = invoice['zatca_invoice'] == true || 
-                       invoice['sync_status'] == 'completed' ||
-                       invoice['zatca_uuid'] != null;
-        final environment = invoice['zatca_environment'] ?? 'live';
-        return isZatca && environment == _selectedEnvironment;
-      }).toList();
+        // Filter ZATCA invoices
+        serverInvoices = allInvoices.where((invoice) {
+          final isZatca = invoice['zatca_invoice'] == true || 
+                         invoice['sync_status'] == 'completed' ||
+                         invoice['zatca_uuid'] != null;
+          final environment = invoice['zatca_environment'] ?? 'live';
+          return isZatca && environment == _selectedEnvironment;
+        }).toList();
+      }
 
+      _zatcaInvoices = serverInvoices;
       _filteredInvoices = List.from(_zatcaInvoices);
       
       setState(() {
@@ -284,11 +298,75 @@ class _ZatcaHistoryScreenState extends State<ZatcaHistoryScreen> {
                 _showZatcaDetails(invoice);
               },
             ),
+            IconButton(
+              icon: Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _deleteInvoice(invoice),
+            ),
           ],
         ),
         onTap: () => _showInvoicePreview(invoice),
       ),
     );
+  }
+
+  Future<void> _deleteInvoice(Map<String, dynamic> invoice) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Invoice'),
+        content: Text('Are you sure you want to delete this ZATCA invoice? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Delete from server if it's a ZATCA invoice
+      if (invoice['zatca_invoice'] == true && invoice['id'] != null) {
+        await _supabaseService.deleteInvoice(invoice['id']);
+        print('Invoice deleted from server successfully');
+      }
+
+      // Remove from local list
+      setState(() {
+        _zatcaInvoices.removeWhere((inv) => inv['no'] == invoice['no'] && inv['date'] == invoice['date']);
+        _filteredInvoices.removeWhere((inv) => inv['no'] == invoice['no'] && inv['date'] == invoice['date']);
+      });
+
+      // Also remove from local storage if exists
+      final prefs = await SharedPreferences.getInstance();
+      final data = prefs.getStringList('invoices') ?? [];
+      final updatedData = data.where((s) {
+        final inv = jsonDecode(s) as Map<String, dynamic>;
+        return !(inv['no'] == invoice['no'] && inv['date'] == invoice['date']);
+      }).toList();
+      await prefs.setStringList('invoices', updatedData);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Invoice deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting invoice: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showZatcaDetails(Map<String, dynamic> invoice) {

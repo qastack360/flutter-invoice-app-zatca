@@ -1292,9 +1292,24 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       'company': invoiceData['company'],
     };
     
-    _history.add(record);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('invoices', _history.map((e) => jsonEncode(e)).toList());
+    
+    if (_sendToZatca) {
+      // Save ZATCA invoice to Supabase server
+      try {
+        await _supabaseService.saveZatcaInvoice(record);
+        print('ZATCA invoice saved to server successfully');
+      } catch (e) {
+        print('Error saving ZATCA invoice to server: $e');
+        // Fallback to local storage if server save fails
+        _history.add(record);
+        await prefs.setStringList('invoices', _history.map((e) => jsonEncode(e)).toList());
+      }
+    } else {
+      // Save local invoice to local storage
+      _history.add(record);
+      await prefs.setStringList('invoices', _history.map((e) => jsonEncode(e)).toList());
+    }
     
     // Increment the appropriate invoice counter
     if (_sendToZatca) {
