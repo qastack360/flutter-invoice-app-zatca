@@ -427,7 +427,21 @@ class InvoiceHelper {
     if (response == null) {
       return 'N/A';
     }
-    final complianceStatus = response['compliance_status'];
+    
+    // Parse ZATCA response if it's a JSON string
+    Map<String, dynamic> zatcaResponse = {};
+    if (response is String) {
+      try {
+        zatcaResponse = jsonDecode(response);
+      } catch (e) {
+        print('Error parsing ZATCA response: $e');
+        return 'Parse error';
+      }
+    } else if (response is Map) {
+      zatcaResponse = Map<String, dynamic>.from(response);
+    }
+    
+    final complianceStatus = zatcaResponse['compliance_status'];
     if (complianceStatus == null) {
       return 'N/A';
     }

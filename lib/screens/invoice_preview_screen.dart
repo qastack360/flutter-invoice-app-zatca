@@ -988,7 +988,21 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
     if (response == null) {
       return 'Not verified';
     }
-    final complianceStatus = response['compliance_status'];
+    
+    // Parse ZATCA response if it's a JSON string
+    Map<String, dynamic> zatcaResponse = {};
+    if (response is String) {
+      try {
+        zatcaResponse = jsonDecode(response);
+      } catch (e) {
+        print('Error parsing ZATCA response: $e');
+        return 'Parse error';
+      }
+    } else if (response is Map) {
+      zatcaResponse = Map<String, dynamic>.from(response);
+    }
+    
+    final complianceStatus = zatcaResponse['compliance_status'];
     if (complianceStatus == null) {
       return 'Unknown status';
     }
