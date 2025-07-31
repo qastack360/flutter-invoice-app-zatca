@@ -317,7 +317,9 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
   }
 
   Widget _buildQRCodeSection(Map<String, dynamic> invoice) {
-    final qrData = QRService.generateZatcaQRData(invoice);
+    final isZatcaInvoice = invoice['zatca_invoice'] == true;
+    final hasZatcaUUID = invoice['zatca_uuid'] != null;
+    
     return Card(
       child: Padding(
         padding: EdgeInsets.all(16),
@@ -329,54 +331,97 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 12),
-            Center(
-              child: Container(
-                padding: EdgeInsets.all(8),
+            
+            if (isZatcaInvoice && !hasZatcaUUID) ...[
+              // ZATCA invoice without UUID - show message
+              Container(
+                padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
+                  color: Colors.orange[50],
+                  border: Border.all(color: Colors.orange[200]!),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: FutureBuilder<Uint8List?>(
-                  future: QRService.generateQRImage(qrData),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return CircularProgressIndicator();
-                    } else if (snapshot.hasData && snapshot.data != null) {
-                      return Image.memory(
-                        snapshot.data!,
-                        width: 200,
-                        height: 200,
-                        fit: BoxFit.contain,
-                      );
-                    } else {
-                      return Container(
-                        width: 200,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'QR Code\nNot Available',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ),
-                      );
-                    }
-                  },
+                child: Column(
+                  children: [
+                    Icon(Icons.qr_code, color: Colors.orange[700], size: 48),
+                    SizedBox(height: 8),
+                    Text(
+                      'ZATCA Invoice',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'QR code will be generated after ZATCA verification',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.orange[700]),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Click Print to verify with ZATCA and generate QR code',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              invoice['zatca_invoice'] == true 
-                ? 'Scan this QR code to verify invoice with ZATCA'
-                : 'Scan this QR code to verify invoice details',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
+            ] else ...[
+              // Local invoice or ZATCA invoice with UUID - show QR code
+              Center(
+                child: Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: FutureBuilder<Uint8List?>(
+                    future: QRService.generateQRImage(QRService.generateZatcaQRData(invoice)),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return CircularProgressIndicator();
+                      } else if (snapshot.hasData && snapshot.data != null) {
+                        return Image.memory(
+                          snapshot.data!,
+                          width: 200,
+                          height: 200,
+                          fit: BoxFit.contain,
+                        );
+                      } else {
+                        return Container(
+                          width: 200,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'QR Code\nNot Available',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                isZatcaInvoice 
+                  ? 'Scan this QR code to verify invoice with ZATCA'
+                  : 'Scan this QR code to verify invoice details',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       ),

@@ -637,6 +637,53 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
     }
 
     try {
+      // For ZATCA invoices, show message that QR will be generated after verification
+      if (_sendToZatca) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.qr_code, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('ZATCA Invoice Preview'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This is a ZATCA invoice preview.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  '• QR code will be generated after ZATCA verification',
+                  style: TextStyle(fontSize: 14),
+                ),
+                Text(
+                  '• Final invoice will include ZATCA UUID for verification',
+                  style: TextStyle(fontSize: 14),
+                ),
+                Text(
+                  '• Click Print to verify with ZATCA and generate final invoice',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      // For local invoices, show preview with QR code
       final imageData = await _generateInvoiceImage();
       if (imageData == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -648,7 +695,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => PreviewInvoiceScreen(imageData: imageData),
+          builder: (_) => PreviewInvoiceScreen(
+            imageData: imageData,
+            isZatcaInvoice: false, // Local invoice
+          ),
         ),
       );
     } catch (e) {
