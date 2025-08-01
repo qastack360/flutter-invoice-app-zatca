@@ -128,39 +128,39 @@ class BluetoothPrinterService {
       final verificationMessage = QRService.generateVerificationMessage(zatcaQRData);
       
       // Generate PDF with ZATCA mobile QR
-      final pdfBytes = await InvoiceHelper.generatePdf(
+    final pdfBytes = await InvoiceHelper.generatePdf(
         invoiceNumber: invoiceNumber,
         invoiceData: invoiceData,
         qrData: zatcaQRData,
         customerName: customerName,
-        date: date,
-        items: items,
+      date: date,
+      items: items,
         total: total,
         vatAmount: vatAmount,
         subtotal: subtotal,
         discount: discount,
-        vatPercent: vatPercent,
-        companyDetails: companyDetails,
+      vatPercent: vatPercent,
+      companyDetails: companyDetails,
         verificationMessage: verificationMessage,
-      );
+    );
 
       // Convert PDF to image
-      final doc = await pdfx.PdfDocument.openData(pdfBytes);
-      final page = await doc.getPage(1);
-      final pageImage = await page.render(
-        width: (page.width * 3).toDouble(),
-        height: (page.height * 3).toDouble(),
-      );
-      final imageBytes = pageImage?.bytes;
+    final doc = await pdfx.PdfDocument.openData(pdfBytes);
+    final page = await doc.getPage(1);
+    final pageImage = await page.render(
+      width: (page.width * 3).toDouble(),
+      height: (page.height * 3).toDouble(),
+    );
+    final imageBytes = pageImage?.bytes;
 
-      await page.close();
-      await doc.close();
+    await page.close();
+    await doc.close();
 
-      if (imageBytes == null) {
-        throw Exception("Failed to render PDF to image");
-      }
+    if (imageBytes == null) {
+      throw Exception("Failed to render PDF to image");
+    }
 
-      await printRasterImage(imageBytes);
+    await printRasterImage(imageBytes);
     } catch (e) {
       print("Error printing invoice: $e");
       rethrow;

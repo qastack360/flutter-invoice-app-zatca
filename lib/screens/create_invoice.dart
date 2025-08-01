@@ -118,7 +118,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
     try {
       final companyData = await _supabaseService.loadCompanyDetails();
       if (companyData != null) {
-        setState(() {
+      setState(() {
           _companyDetails = CompanyDetails(
             id: 1,
             ownerName1: companyData['ownerName1'] ?? '',
@@ -1115,37 +1115,37 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
 
   // Print local invoice
   Future<void> _printLocalInvoice(bool mockPrinting) async {
-    final imageData = await _generateInvoiceImage();
-    if (imageData == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to generate invoice image')),
-      );
-      return;
-    }
+      final imageData = await _generateInvoiceImage();
+      if (imageData == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to generate invoice image')),
+        );
+        return;
+      }
 
-    if (mockPrinting) {
-      await showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          insetPadding: const EdgeInsets.all(10),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.9,
-            ),
-            child: SingleChildScrollView(
+      if (mockPrinting) {
+        await showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            insetPadding: const EdgeInsets.all(10),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.9,
+              ),
+              child: SingleChildScrollView(
               child: Container(
                 color: Colors.white,
                 child: Image.memory(imageData),
               ),
+              ),
             ),
           ),
-        ),
-      );
-    } else {
-      if (_printerSelectionService.selectedPrinter == null) {
-        _showPrinterDialog();
-        return;
-      }
+        );
+      } else {
+        if (_printerSelectionService.selectedPrinter == null) {
+          _showPrinterDialog();
+          return;
+        }
 
       // Calculate totals
       final subtotal = _items.fold<double>(0, (sum, it) => sum + it.quantity * it.rate);
@@ -1299,7 +1299,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen>
       try {
         await _supabaseService.saveZatcaInvoice(record);
         print('ZATCA invoice saved to server successfully');
-      } catch (e) {
+    } catch (e) {
         print('Error saving ZATCA invoice to server: $e');
         // Fallback to local storage if server save fails
         _history.add(record);

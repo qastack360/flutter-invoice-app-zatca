@@ -78,7 +78,7 @@ class PreviewInvoiceScreen extends StatelessWidget {
               ),
             )
           : SingleChildScrollView(
-              scrollDirection: Axis.vertical,
+        scrollDirection: Axis.vertical,
               child: Column(
                 children: [
                   if (isZatcaInvoice) ...[
@@ -109,17 +109,17 @@ class PreviewInvoiceScreen extends StatelessWidget {
                     ),
                   ],
                   InteractiveViewer(
-                    minScale: 0.1,
-                    maxScale: 5.0,
-                    child: Image.memory(
-                      imageData!,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                    ),
+          minScale: 0.1,
+          maxScale: 5.0,
+          child: Image.memory(
+            imageData!,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
                   ),
                 ],
-              ),
-            ),
+        ),
+      ),
     );
   }
 }

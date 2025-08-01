@@ -136,8 +136,8 @@ class InvoiceHelper {
                         pw.Container(
                           width: double.infinity,
                           child: pw.Row(
-                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                            children: [
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
                               buildText('Phone / الهاتف', size: 10),
                               buildText(companyDetails['phone'] ?? '', align: pw.TextAlign.right),
                             ],
@@ -147,11 +147,11 @@ class InvoiceHelper {
                         pw.Container(
                           width: double.infinity,
                           child: pw.Row(
-                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                            children: [
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
                               buildText('VAT No / الرقم الضريبي', size: 10),
                               buildText(companyDetails['vatNo'] ?? '', align: pw.TextAlign.right),
-                            ],
+                          ],
                           ),
                         ),
                     ],
