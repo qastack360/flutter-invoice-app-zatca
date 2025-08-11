@@ -4,22 +4,28 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Create invoices table
 CREATE TABLE IF NOT EXISTS invoices (
     id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     invoice_number INTEGER NOT NULL,
+    invoice_prefix TEXT,
     invoice_date TIMESTAMP WITH TIME ZONE NOT NULL,
     customer_name TEXT NOT NULL,
     salesman TEXT,
     vat_number TEXT,
     total_amount DECIMAL(10,2) NOT NULL,
     vat_amount DECIMAL(10,2) NOT NULL,
+    subtotal DECIMAL(10,2),
+    discount DECIMAL(10,2) DEFAULT 0,
+    cash DECIMAL(10,2) DEFAULT 0,
+    vat_percent DECIMAL(5,2) DEFAULT 15.0,
     items JSONB NOT NULL,
     company_details JSONB NOT NULL,
-    sync_status TEXT DEFAULT 'pending' CHECK (sync_status IN ('pending', 'in_progress', 'completed', 'failed')),
+    zatca_invoice BOOLEAN DEFAULT false,
     zatca_uuid TEXT,
-    zatca_qr_code TEXT,
+    zatca_environment TEXT DEFAULT 'sandbox',
     zatca_response JSONB,
+    sync_status TEXT DEFAULT 'pending' CHECK (sync_status IN ('pending', 'in_progress', 'completed', 'failed')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create sync_tracking table for detailed sync status

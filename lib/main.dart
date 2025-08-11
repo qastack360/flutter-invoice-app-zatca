@@ -11,15 +11,26 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
-  await SupabaseService().initialize();
+  try {
+    // Initialize Supabase
+    await SupabaseService().initialize();
+    print('✅ App initialized successfully');
+  } catch (e) {
+    print('❌ App initialization failed: $e');
+    // Continue with app but show error in UI
+  }
 
   // Load Arabic fonts
-  final arabicFontLoader = FontLoader('NotoNaskhArabic')
-    ..addFont(rootBundle.load('assets/fonts/NotoNaskhArabic-Regular.ttf'))
-    ..addFont(rootBundle.load('assets/fonts/NotoNaskhArabic-Bold.ttf'));
+  try {
+    final arabicFontLoader = FontLoader('NotoNaskhArabic')
+      ..addFont(rootBundle.load('assets/fonts/NotoNaskhArabic-Regular.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/NotoNaskhArabic-Bold.ttf'));
 
-  await arabicFontLoader.load();
+    await arabicFontLoader.load();
+    print('✅ Fonts loaded successfully');
+  } catch (e) {
+    print('❌ Font loading failed: $e');
+  }
 
   runApp(InvoiceApp());
 }
@@ -45,6 +56,8 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = true;
+  bool _hasConnectionError = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -53,17 +66,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkAuthState() async {
-    // Listen to auth state changes
-    _supabaseService.client.auth.onAuthStateChange.listen((data) {
+    try {
+      // Listen to auth state changes
+      _supabaseService.client.auth.onAuthStateChange.listen((data) {
+        setState(() {
+          _isLoading = false;
+        });
+      });
+
+      // Check initial auth state
       setState(() {
         _isLoading = false;
       });
-    });
-
-    // Check initial auth state
-    setState(() {
-      _isLoading = false;
-    });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _hasConnectionError = true;
+        _errorMessage = 'Connection error: $e';
+      });
+    }
   }
 
   @override
@@ -77,6 +98,34 @@ class _AuthWrapperState extends State<AuthWrapper> {
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text('Loading...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_hasConnectionError) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error, size: 64, color: Colors.red),
+              SizedBox(height: 16),
+              Text('Connection Error', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text(_errorMessage, textAlign: TextAlign.center),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _hasConnectionError = false;
+                  });
+                  _checkAuthState();
+                },
+                child: Text('Retry'),
+              ),
             ],
           ),
         ),

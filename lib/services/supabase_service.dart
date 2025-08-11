@@ -13,12 +13,44 @@ class SupabaseService {
 
   // Initialize Supabase client
   Future<void> initialize() async {
-    await Supabase.initialize(
-      url: 'https://layidhpzfoyukkmvnnpf.supabase.co',
-      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxheWlkaHB6Zm95dWtrbXZubnBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2ODUyODEsImV4cCI6MjA2OTI2MTI4MX0.M4YlblXs6jztN42dZ97oFyffioqJrO7liLcvVdkLMew',
-    );
-    _supabase = Supabase.instance.client;
-    await _createDefaultAdminUser();
+    try {
+      await Supabase.initialize(
+        url: 'https://layidhpzfoyukkmvnnpf.supabase.co',
+        anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxheWlkaHB6Zm95dWtrbXZubnBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2ODUyODEsImV4cCI6MjA2OTI2MTI4MX0.M4YlblXs6jztN42dZ97oFyffioqJrO7liLcvVdkLMew',
+      );
+      _supabase = Supabase.instance.client;
+      
+      // Test connection
+      await _testConnection();
+      
+      await _createDefaultAdminUser();
+    } catch (e) {
+      print('Supabase initialization failed: $e');
+      throw Exception('Failed to connect to Supabase: $e');
+    }
+  }
+
+  // Test Supabase connection
+  Future<void> _testConnection() async {
+    try {
+      // Try a simple query to test connection
+      await _supabase.from('company_details').select('count').limit(1);
+      print('✅ Supabase connection successful');
+    } catch (e) {
+      print('❌ Supabase connection failed: $e');
+      throw Exception('Cannot connect to Supabase server. Please check your internet connection.');
+    }
+  }
+
+  // Public method to test connection
+  Future<bool> testConnection() async {
+    try {
+      await _testConnection();
+      return true;
+    } catch (e) {
+      print('Connection test failed: $e');
+      return false;
+    }
   }
 
   // Create default admin user if not exists
@@ -85,15 +117,22 @@ class SupabaseService {
       final response = await _supabase
           .from('invoices')
           .insert({
-            'invoice_number': invoiceData['no'],
+            'user_id': _supabase.auth.currentUser?.id ?? 'default',
+            'invoice_number': invoiceData['no'] is int ? invoiceData['no'] : int.tryParse(invoiceData['no'].toString()) ?? 0,
+            'invoice_prefix': invoiceData['invoice_prefix'] ?? '',
             'invoice_date': invoiceData['date'],
-            'customer_name': invoiceData['customer'],
-            'salesman': invoiceData['salesman'],
-            'vat_number': invoiceData['vatNo'],
-            'total_amount': invoiceData['total'],
-            'vat_amount': invoiceData['vatAmount'],
+            'customer_name': invoiceData['customer'] ?? '',
+            'salesman': invoiceData['salesman'] ?? '',
+            'vat_number': invoiceData['vatNo'] ?? '',
+            'total_amount': invoiceData['total'] is double ? invoiceData['total'] : double.tryParse(invoiceData['total'].toString()) ?? 0.0,
+            'vat_amount': invoiceData['vatAmount'] is double ? invoiceData['vatAmount'] : double.tryParse(invoiceData['vatAmount'].toString()) ?? 0.0,
+            'subtotal': invoiceData['subtotal'] is double ? invoiceData['subtotal'] : double.tryParse(invoiceData['subtotal'].toString()) ?? 0.0,
+            'discount': invoiceData['discount'] is double ? invoiceData['discount'] : double.tryParse(invoiceData['discount'].toString()) ?? 0.0,
+            'cash': invoiceData['cash'] is double ? invoiceData['cash'] : double.tryParse(invoiceData['cash'].toString()) ?? 0.0,
+            'vat_percent': invoiceData['vatPercent'] is double ? invoiceData['vatPercent'] : double.tryParse(invoiceData['vatPercent'].toString()) ?? 15.0,
             'items': jsonEncode(invoiceData['items']),
             'company_details': jsonEncode(invoiceData['company']),
+            'zatca_invoice': false,
             'sync_status': 'pending',
             'created_at': DateTime.now().toIso8601String(),
             'updated_at': DateTime.now().toIso8601String(),
@@ -218,22 +257,23 @@ class SupabaseService {
           .from('invoices')
           .insert({
             'user_id': _supabase.auth.currentUser?.id ?? 'default',
-            'invoice_number': invoiceData['no'],
-            'invoice_prefix': invoiceData['invoice_prefix'],
+            'invoice_number': invoiceData['no'] is int ? invoiceData['no'] : int.tryParse(invoiceData['no'].toString()) ?? 0,
+            'invoice_prefix': invoiceData['invoice_prefix'] ?? '',
             'invoice_date': invoiceData['date'],
-            'customer_name': invoiceData['customer'],
-            'salesman': invoiceData['salesman'],
-            'vat_number': invoiceData['vatNo'],
-            'total_amount': invoiceData['total'],
-            'vat_amount': invoiceData['vatAmount'],
-            'subtotal': invoiceData['subtotal'],
-            'discount': invoiceData['discount'],
-            'cash': invoiceData['cash'],
+            'customer_name': invoiceData['customer'] ?? '',
+            'salesman': invoiceData['salesman'] ?? '',
+            'vat_number': invoiceData['vatNo'] ?? '',
+            'total_amount': invoiceData['total'] is double ? invoiceData['total'] : double.tryParse(invoiceData['total'].toString()) ?? 0.0,
+            'vat_amount': invoiceData['vatAmount'] is double ? invoiceData['vatAmount'] : double.tryParse(invoiceData['vatAmount'].toString()) ?? 0.0,
+            'subtotal': invoiceData['subtotal'] is double ? invoiceData['subtotal'] : double.tryParse(invoiceData['subtotal'].toString()) ?? 0.0,
+            'discount': invoiceData['discount'] is double ? invoiceData['discount'] : double.tryParse(invoiceData['discount'].toString()) ?? 0.0,
+            'cash': invoiceData['cash'] is double ? invoiceData['cash'] : double.tryParse(invoiceData['cash'].toString()) ?? 0.0,
+            'vat_percent': invoiceData['vatPercent'] is double ? invoiceData['vatPercent'] : double.tryParse(invoiceData['vatPercent'].toString()) ?? 15.0,
             'items': jsonEncode(invoiceData['items']),
             'company_details': jsonEncode(invoiceData['company']),
             'zatca_invoice': true,
             'zatca_uuid': invoiceData['zatca_uuid'],
-            'zatca_environment': invoiceData['zatca_environment'],
+            'zatca_environment': invoiceData['zatca_environment'] ?? 'sandbox',
             'zatca_response': jsonEncode(invoiceData['zatca_response']),
             'sync_status': 'completed',
             'created_at': DateTime.now().toIso8601String(),
